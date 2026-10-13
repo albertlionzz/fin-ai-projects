@@ -1,0 +1,28 @@
+{
+  "period": "2025A",
+  "meta": {
+    "company": "长恒电子",
+    "unit": "万元",
+    "source": "模拟数据，用于多期趋势规则验证",
+    "note": "第 4 期（当期）。累计四年同向恶化，多项指标终值仍不算极端，但通道已成立。"
+  },
+  "items": {
+    "revenue": 112000.0,
+    "cost_of_sales": 84000.0,
+    "net_profit": 6200.0,
+    "accounts_receivable": 28600.0,
+    "inventory": 18700.0,
+    "total_assets": 165000.0,
+    "total_liabilities": 94500.0,
+    "total_equity": 70500.0,
+    "net_assets": 70500.0,
+    "current_assets": 73500.0,
+    "current_liabilities": 54000.0,
+    "operating_cash_flow": 5100.0,
+    "goodwill": 6000.0,
+    "selling_expense": 6000.0,
+    "admin_expense": 4800.0,
+    "rd_expense": 3300.0,
+    "finance_expense": 2100.0
+  }
+}

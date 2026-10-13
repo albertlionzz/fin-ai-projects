@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from .models import AnalysisResult, Finding, FinancialStatement, Level
+from .models import AnalysisResult, Finding, FinancialStatement, Level, StatementSeries
 
 
 _LEVEL_MARK = {Level.HIGH: "🔴", Level.WARN: "🟡", Level.INFO: "⚪"}
@@ -21,12 +21,16 @@ def _fmt_ratio(v: float | None, suffix: str = "%") -> str:
 # ---------------------------------------------------------------- 控制台
 
 
-def render_console(result: AnalysisResult) -> str:
+def render_console(
+    result: AnalysisResult, series: StatementSeries | None = None
+) -> str:
     """终端摘要。面向快速查看，不追求完整。"""
     lines: list[str] = []
     bar = "=" * 62
     lines.append(bar)
     lines.append(f" {result.company} · {result.period}")
+    if series is not None and series.has_trend(3):
+        lines.append(f" 趋势区间：{' → '.join(series.periods)}（{len(series)} 期）")
     lines.append(bar)
     lines.append(f" 风险分 {result.risk_score():.1f}/100 [{result.risk_grade()}]    "
                  f"重大 {result.high_count}  关注 {result.warn_count}   合计 {len(result.findings)}")
@@ -66,13 +70,19 @@ def render_markdown(
     result: AnalysisResult,
     cur: FinancialStatement | None = None,
     prev: FinancialStatement | None = None,
+    series: StatementSeries | None = None,
 ) -> str:
     """完整 Markdown 报告。这是交付给用户的主产物。"""
     md: list[str] = []
     md.append(f"# {result.company} · 财务报表异常分析")
     md.append("")
-    md.append(f"> 报告期：**{result.period}**　｜　风险分：**{result.risk_score():.1f} / 100**"
-              f"（等级：**{result.risk_grade()}**）")
+    trend_on = series is not None and series.has_trend(3)
+    if trend_on:
+        md.append(f"> 报告期：**{result.period}**　｜　趋势区间：**{' → '.join(series.periods)}**"
+                  f"（{len(series)} 期）")
+    else:
+        md.append(f"> 报告期：**{result.period}**")
+    md.append(f"> 风险分：**{result.risk_score():.1f} / 100**（等级：**{result.risk_grade()}**）")
     md.append("")
 
     # --- 概览 ---
@@ -91,24 +101,64 @@ def render_markdown(
 
     # --- 关键指标 ---
     if cur is not None and prev is not None:
-        md.append("## 二、关键财务指标")
-        md.append("")
-        md.append("| 指标 | " + prev.period + " | " + cur.period + " | 变动 |")
-        md.append("|---|---|---|---|")
-        pairs = [
-            ("毛利率", prev.gross_margin(), cur.gross_margin(), "%"),
-            ("净利率", prev.net_margin(), cur.net_margin(), "%"),
-            ("资产负债率", prev.debt_ratio(), cur.debt_ratio(), "%"),
-            ("流动比率", prev.current_ratio(), cur.current_ratio(), ""),
-            ("经营现金流/净利润", prev.ocf_to_profit(), cur.ocf_to_profit(), ""),
-            ("ROE", prev.roe(), cur.roe(), "%"),
-        ]
-        for name, pv, cv, suf in pairs:
-            if pv is None and cv is None:
-                continue
-            delta = "—" if (pv is None or cv is None) else f"{cv - pv:+.2f}{suf}"
-            md.append(f"| {name} | {_fmt_ratio(pv, suf)} | {_fmt_ratio(cv, suf)} | {delta} |")
-        md.append("")
+        if trend_on:
+            # 多期模式：横向铺开全部期间，一眼看出趋势方向
+            md.append("## 二、关键财务指标（多期趋势）")
+            md.append("")
+            header = "| 指标 | " + " | ".join(series.periods) + " | 趋势 |"
+            md.append(header)
+            md.append("|" + "---|" * (len(series.periods) + 2))
+            indicators = [
+                ("毛利率", lambda s: s.gross_margin(), "%", -1),
+                ("净利率", lambda s: s.net_margin(), "%", -1),
+                ("资产负债率", lambda s: s.debt_ratio(), "%", +1),
+                ("流动比率", lambda s: s.current_ratio(), "", -1),
+                ("经营现金流/净利润", lambda s: s.ocf_to_profit(), "", -1),
+                ("ROE", lambda s: s.roe(), "%", +1),
+            ]
+            for name, getter, suf, good_dir in indicators:
+                vals = [getter(s) for s in series]
+                if all(v is None for v in vals):
+                    continue
+                cells = " | ".join(_fmt_ratio(v, suf) for v in vals)
+                usable = [v for v in vals if v is not None]
+                if len(usable) < 2:
+                    trend_txt = "—"
+                else:
+                    deltas = [usable[i + 1] - usable[i] for i in range(len(usable) - 1)]
+                    rising = all(d >= 0 for d in deltas)
+                    falling = all(d <= 0 for d in deltas)
+                    if rising:
+                        trend_txt = "持续上升" if good_dir > 0 else "持续上升（不利）"
+                    elif falling:
+                        trend_txt = "持续下降" if good_dir < 0 else "持续下降（不利）"
+                    else:
+                        trend_txt = "波动"
+                md.append(f"| {name} | {cells} | {trend_txt} |")
+            md.append("")
+            md.append("> 判定说明：**持续上升（不利）**指该指标朝恶化方向单调变动。"
+                      "单项看可能都未触及时值观察线，但连续同向变动已构成恶化通道，"
+                      "这正是单期分析最容易漏掉的问题类型。")
+            md.append("")
+        else:
+            md.append("## 二、关键财务指标")
+            md.append("")
+            md.append("| 指标 | " + prev.period + " | " + cur.period + " | 变动 |")
+            md.append("|---|---|---|---|")
+            pairs = [
+                ("毛利率", prev.gross_margin(), cur.gross_margin(), "%"),
+                ("净利率", prev.net_margin(), cur.net_margin(), "%"),
+                ("资产负债率", prev.debt_ratio(), cur.debt_ratio(), "%"),
+                ("流动比率", prev.current_ratio(), cur.current_ratio(), ""),
+                ("经营现金流/净利润", prev.ocf_to_profit(), cur.ocf_to_profit(), ""),
+                ("ROE", prev.roe(), cur.roe(), "%"),
+            ]
+            for name, pv, cv, suf in pairs:
+                if pv is None and cv is None:
+                    continue
+                delta = "—" if (pv is None or cv is None) else f"{cv - pv:+.2f}{suf}"
+                md.append(f"| {name} | {_fmt_ratio(pv, suf)} | {_fmt_ratio(cv, suf)} | {delta} |")
+            md.append("")
 
     # --- 异常明细 ---
     md.append("## 三、异常项明细")
@@ -154,4 +204,9 @@ def render_markdown(
     md.append("*风险分口径：各发现按严重度加权（重大 10 / 关注 4 / 提示 1）后经饱和函数 "
               "`(1-e^(-x/20))×100` 归一，单调递增不触顶。等级映射："
               "≥85 极高、≥65 高、≥35 中、其余低。权重与阈值应随历史样本回测校准。*")
+    if trend_on:
+        md.append("")
+        md.append(f"*趋势口径：本报告基于 {len(series)} 期报表（{' → '.join(series.periods)}）。"
+                  "某信号在最近 2 个相邻报告期均触及时值观察线，即判定为持续性信号并升级一级严重度；"
+                  "中间中断一期不计持续。多指标同向连续变动另按 `QUALITY_DRIFT` 单独判定。*")
     return "\n".join(md)

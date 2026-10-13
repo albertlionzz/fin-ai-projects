@@ -1,0 +1,104 @@
+{
+  "company": "长恒电子",
+  "period": "2025A",
+  "findings": [
+    {
+      "rule_id": "MARGIN_EROSION",
+      "level": 2,
+      "title": "营业收入增长但净利率下滑",
+      "detail": "营业收入同比 +3.7%，净利率由 6.76% 降至 5.54%（-1.22pct）。规模扩张未转化为盈利改善，需核查费用或成本端。该信号在 2023A→2025A 连续 2 个报告期重复出现，非孤立波动，已升级为重大。",
+      "items": [
+        "revenue",
+        "net_profit"
+      ],
+      "evidence": {
+        "revenue_yoy": 3.7,
+        "net_margin_prev": 6.76,
+        "net_margin_cur": 5.54
+      },
+      "basis": "增收不增利是盈利质量恶化的典型形态；跨期持续性信号比单期跳变更能说明问题是结构性的",
+      "confidence": 1.0,
+      "level_label": "重大"
+    },
+    {
+      "rule_id": "QUALITY_DRIFT",
+      "level": 2,
+      "title": "5 项盈利质量指标连续 4 期同向恶化",
+      "detail": "毛利率、净利率、经营现金流/净利润、资产负债率、流动比率 在 2022A→2025A 期间持续走坏，每一期都朝同一方向变动。单项看可能均未触及时值观察线，但连续同向变动已构成明确的恶化通道，属于结构性问题。",
+      "items": [
+        "revenue",
+        "net_profit",
+        "operating_cash_flow"
+      ],
+      "evidence": {
+        "worsening": [
+          "毛利率",
+          "净利率",
+          "经营现金流/净利润",
+          "资产负债率",
+          "流动比率"
+        ],
+        "periods": [
+          "2022A",
+          "2023A",
+          "2024A",
+          "2025A"
+        ]
+      },
+      "basis": "单期阈值法会系统性漏掉'每期小幅恶化'型问题；多指标同向连续变动是识别慢性恶化的补充维度",
+      "confidence": 1.0,
+      "level_label": "重大"
+    }
+  ],
+  "summary": "长恒电子 2025A 共触发 2 项异常：重大 2 项、关注 0 项。 需优先核查：营业收入增长但净利率下滑；5 项盈利质量指标连续 4 期同向恶化。",
+  "reasoning": "### 主线索归因\n\n- **收入质量**（命中 1 项：`MARGIN_EROSION`）\n  应收增速跑赢营收、现金流与利润背离、增收不增利同时出现，指向收入确认偏松或放宽信用换收入。重点核查前五大客户账龄、期后退款与信用政策变更记录。\n- **其他**（`QUALITY_DRIFT`）\n  未归入上述主线索，建议单独确认业务背景后再判断性质。\n\n### 建议核查顺序\n\n1. **营业收入增长但净利率下滑**（`MARGIN_EROSION`）—— 增收不增利是盈利质量恶化的典型形态；跨期持续性信号比单期跳变更能说明问题是结构性的\n2. **5 项盈利质量指标连续 4 期同向恶化**（`QUALITY_DRIFT`）—— 单期阈值法会系统性漏掉'每期小幅恶化'型问题；多指标同向连续变动是识别慢性恶化的补充维度\n\n### 对判断的整体影响\n\n异常以关注项为主，尚未形成系统性风险特征。建议按上述顺序核实，若关注项在下一期继续恶化，再升级为重大处理。",
+  "trace": [
+    {
+      "agent": "audit",
+      "action": "rule_engine",
+      "detail": "10 条规则（含多期趋势）→ 2 项发现（重大 2 / 关注 0），趋势区间 2022A→2025A",
+      "ok": true
+    },
+    {
+      "agent": "report",
+      "action": "template_reasoning",
+      "detail": "未接 LLM，使用确定性聚合模板",
+      "ok": true
+    }
+  ],
+  "metrics": {
+    "current": {
+      "gross_margin": 25.0,
+      "net_margin": 5.54,
+      "debt_ratio": 57.27,
+      "current_ratio": 1.36,
+      "ocf_to_profit": 0.82,
+      "roe": 8.79
+    },
+    "previous": {
+      "gross_margin": 26.67,
+      "net_margin": 6.76,
+      "debt_ratio": 54.29,
+      "current_ratio": 1.5,
+      "ocf_to_profit": 0.93,
+      "roe": 10.01
+    },
+    "items_count": {
+      "current": 17,
+      "previous": 17
+    },
+    "series": {
+      "periods": [
+        "2022A",
+        "2023A",
+        "2024A",
+        "2025A"
+      ],
+      "n_periods": 4,
+      "trend_enabled": true
+    }
+  },
+  "risk_score": 63.21,
+  "risk_grade": "高",
+  "risk_action": "建议对重大异常项做专项函证或走访核实后再定稿"
+}

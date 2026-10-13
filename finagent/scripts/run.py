@@ -1,9 +1,17 @@
 """命令行入口。
 
 用法：
-  python scripts/run.py analyze --cur <当期.json> --prev <上期.json>
+  # 两期分析（原有行为）
   python scripts/run.py analyze --cur data/statements/示例制造_2025A.json \
                                 --prev data/statements/示例制造_2024A.json --md out.md
+
+  # 多期分析（启用趋势规则，顺序不限）
+  python scripts/run.py analyze --periods data/statements/长恒电子_2022A.json \
+                                           data/statements/长恒电子_2023A.json \
+                                           data/statements/长恒电子_2024A.json \
+                                           data/statements/长恒电子_2025A.json \
+                                --md out.md
+
   python scripts/run.py extract --text report.txt --period 2025A
   python scripts/run.py rules                     列出全部注册规则
   python scripts/run.py batch --dir data/statements  批量分析（按 *_YYYYA.json 配对）
@@ -25,8 +33,10 @@ from finagent import (  # noqa: E402
     ExtractAgent,
     Orchestrator,
     ReportAgent,
+    StatementSeries,
     build_llm,
     load_pair,
+    load_statement,
     render_console,
     render_markdown,
 )
@@ -34,13 +44,29 @@ from finagent.rules import DEFAULT_RULES, RuleBook  # noqa: E402
 
 
 def cmd_analyze(args: argparse.Namespace) -> int:
-    cur, prev = load_pair(args.cur, args.prev)
+    # 两种输入方式：--periods 传多期（启用趋势分析），--cur/--prev 传两期（原有行为）
+    series: StatementSeries | None = None
+    if args.periods:
+        if len(args.periods) < 2:
+            print("[错误] --periods 至少需要 2 期报表", file=sys.stderr)
+            return 2
+        series = StatementSeries(statements=[load_statement(p) for p in args.periods])
+        cur, prev = series.latest, series.previous
+    elif args.cur and args.prev:
+        cur, prev = load_pair(args.cur, args.prev)
+    else:
+        print(
+            "[错误] 请指定 --cur 与 --prev（两期分析），或用 --periods 传多期报表（启用趋势分析）",
+            file=sys.stderr,
+        )
+        return 2
+
     llm = build_llm(args.llm)
     orch = Orchestrator(
         extract=ExtractAgent(llm=llm),
         report=ReportAgent(llm=llm),
     )
-    result = orch.analyze(cur, prev, company=args.company)
+    result = orch.analyze(cur, prev, company=args.company, series=series)
 
     # --json-out 落盘（结构化结果，供下游程序消费）
     if args.json_out:
@@ -56,12 +82,12 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0
 
-    print(render_console(result))
+    print(render_console(result, series=series))
 
     if args.md:
         out = Path(args.md)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(render_markdown(result, cur, prev), encoding="utf-8")
+        out.write_text(render_markdown(result, cur, prev, series=series), encoding="utf-8")
         print(f"\n[ok] Markdown 报告已写入：{out}")
     return 0
 
@@ -133,9 +159,17 @@ def main() -> int:
     ap.add_argument("--llm", default="auto", help="auto(默认) / api / null")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    a = sub.add_parser("analyze", help="分析两份报表的差异与异常")
-    a.add_argument("--cur", required=True, help="当期报表 JSON")
-    a.add_argument("--prev", required=True, help="上期报表 JSON")
+    a = sub.add_parser("analyze", help="分析两期或多期报表的差异与异常")
+    a.add_argument("--cur", default=None, help="当期报表 JSON（两期模式）")
+    a.add_argument("--prev", default=None, help="上期报表 JSON（两期模式）")
+    a.add_argument(
+        "--periods",
+        nargs="+",
+        default=None,
+        metavar="JSON",
+        help="多期报表路径，至少 2 个。传入即启用多期趋势分析，"
+             "顺序不限（内部按期排序）",
+    )
     a.add_argument("--company", default=None, help="主体名称（缺省取报表 meta）")
     a.add_argument("--md", default=None, help="输出 Markdown 报告的路径")
     a.add_argument("--json", action="store_true", help="在控制台打印 JSON 而非摘要")

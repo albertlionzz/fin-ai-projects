@@ -32,8 +32,11 @@ from .models import (
     FinancialStatement,
     Finding,
     Level,
+    StatementSeries,
+    build_series,
     load_pair,
     load_statement,
+    period_sort_key,
 )
 from .render import render_console, render_markdown
 
@@ -51,9 +54,12 @@ __all__ = [
     "OpenAICompatLLM",
     "Orchestrator",
     "ReportAgent",
+    "StatementSeries",
     "build_llm",
+    "build_series",
     "load_pair",
     "load_statement",
+    "period_sort_key",
     "render_console",
     "render_markdown",
 ]

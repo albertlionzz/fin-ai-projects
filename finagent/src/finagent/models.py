@@ -197,7 +197,12 @@ class Finding:
 
 @dataclass
 class AgentTrace:
-    """Agent 的执行轨迹。作品集里这一项很关键——它证明流程是可控、可复现的。"""
+    """Agent 的执行轨迹。作品集里这一项很关键——它证明流程是可控、可复现的。
+
+    duration_ms 刻意不进入 to_dict()：它是性能观测值，每次运行都不同。
+    把它塞进结构化输出会让"同一输入必须得到同一输出"这条可复算承诺失效
+    （下游做 diff 时会被毫秒数噪声淹没）。控制台渲染仍会显示它。
+    """
 
     agent: str
     action: str
@@ -206,7 +211,12 @@ class AgentTrace:
     ok: bool = True
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        return {
+            "agent": self.agent,
+            "action": self.action,
+            "detail": self.detail,
+            "ok": self.ok,
+        }
 
 
 @dataclass
@@ -249,19 +259,43 @@ class AnalysisResult:
     def risk_grade(self) -> str:
         """把 0~100 的风险分映射到可执行档位。
 
-        分数本身只是标量，读者需要的是"该做什么"。档位设计原则：
-        宁可把边界定得保守，也不要给出模棱两可的中间态。
+        取两个维度的较高者，缺一不可：
+
+        1. **分数档**：按饱和函数得分切分，反映异常的总量与集中度。
+        2. **严重度档**：按重大异常的数量切分。**只要存在 1 项重大，
+           档位不得低于「高」**——重大异常的定义就是"需要专项核查"，
+           让使用者去"常规复核"是逻辑矛盾。
+
+        早先版本只按分数切档，出现过"2 项重大异常却建议就关注项问询"
+        的自相矛盾输出（重大项少时饱和函数得分偏低）。这是设计缺陷，
+        不是阈值问题——**建议动作必须与最严重发现的等级自洽。**
         """
-        s = self.risk_score()
         if not self.findings:
             return "低"
+
+        order = ["低", "中", "高", "极高"]
+
+        # 维度一：分数档
+        s = self.risk_score()
         if s >= 85:
-            return "极高"
-        if s >= 65:
-            return "高"
-        if s >= 35:
-            return "中"
-        return "低"
+            by_score = "极高"
+        elif s >= 65:
+            by_score = "高"
+        elif s >= 35:
+            by_score = "中"
+        else:
+            by_score = "低"
+
+        # 维度二：严重度档（重大异常数量）
+        n_high = self.high_count
+        if n_high >= 4:
+            by_severity = "极高"
+        elif n_high >= 1:
+            by_severity = "高"
+        else:
+            by_severity = "中"
+
+        return order[max(order.index(by_score), order.index(by_severity))]
 
     def risk_action(self) -> str:
         """与档位配套的建议动作，直接写进报告结论区。"""
@@ -300,3 +334,93 @@ def load_pair(
 ) -> tuple[FinancialStatement, FinancialStatement]:
     """加载当期与上期。顺序容易搞反，这里统一约定：先当期后上期。"""
     return load_statement(cur_path), load_statement(prev_path)
+
+
+# ---------------------------------------------------------------- 多期序列
+
+
+def period_sort_key(period: str) -> tuple:
+    """把 "2025A" / "2025Q1" 之类的期间标签转成可排序的键。
+
+    不能直接按字符串排："2025Q1" vs "2024A" 比字符串会得到错误顺序
+    （'Q' > 'A'）。做法是抽出其中的数字按数值比，非数字部分做次级排序。
+    抽不出数字时退化为字符串比较，保证不抛异常。
+    """
+    import re as _re
+
+    nums = tuple(int(n) for n in _re.findall(r"\d+", period))
+    return (nums, period)
+
+
+@dataclass
+class StatementSeries:
+    """按时间顺序排列的多期报表序列。
+
+    存在的理由：**单期对比看不出趋势，趋势才是结构性问题的证据。**
+    "今年应收增速突然超营收 40pct" 可能是一次性渠道压货；
+    "连续三年都超 40pct" 几乎一定是收入确认政策出了问题。
+    前者要问，后者要查。
+
+    约定：内部始终按时间正序存放（最早在前，最新在后），
+    调用方传进来的顺序不影响结果。
+    """
+
+    statements: list[FinancialStatement] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.statements = sorted(self.statements, key=lambda s: period_sort_key(s.period))
+
+    # --- 基本属性 ---
+
+    @property
+    def latest(self) -> FinancialStatement | None:
+        return self.statements[-1] if self.statements else None
+
+    @property
+    def previous(self) -> FinancialStatement | None:
+        return self.statements[-2] if len(self.statements) >= 2 else None
+
+    @property
+    def periods(self) -> list[str]:
+        return [s.period for s in self.statements]
+
+    def __len__(self) -> int:
+        return len(self.statements)
+
+    def __iter__(self):
+        return iter(self.statements)
+
+    def __getitem__(self, i: int) -> FinancialStatement:
+        return self.statements[i]
+
+    # --- 派生结构 ---
+
+    def pairs(self) -> list[tuple[FinancialStatement, FinancialStatement]]:
+        """全部相邻期配对，顺序为 (上期, 当期)。"""
+        return list(zip(self.statements, self.statements[1:]))
+
+    def trailing_pairs(self, n: int) -> list[tuple[FinancialStatement, FinancialStatement]]:
+        """最近 n 个相邻期配对。期数不足时返回全部，由调用方判断是否够用。"""
+        return self.pairs()[-n:] if n > 0 else []
+
+    def has_trend(self, min_periods: int) -> bool:
+        """序列是否足以做趋势判断：至少要有 min_periods 期报表。
+
+        2 期只能做同比，谈不上趋势。趋势判断的最低要求是 3 期。
+        """
+        return len(self.statements) >= min_periods
+
+    def to_dict(self) -> dict:
+        return {
+            "periods": self.periods,
+            "statements": [s.to_dict() for s in self.statements],
+        }
+
+
+def build_series(paths: Sequence[str | Path]) -> StatementSeries:
+    """从多个报表路径构造序列。重复期间后者覆盖前者。"""
+    seen: dict[str, FinancialStatement] = {}
+    for p in paths:
+        st = load_statement(p)
+        seen[st.period] = st
+    return StatementSeries(statements=list(seen.values()))

@@ -1,0 +1,28 @@
+{
+  "period": "2024A",
+  "meta": {
+    "company": "长恒电子",
+    "unit": "万元",
+    "source": "模拟数据，用于多期趋势规则验证",
+    "note": "第 3 期。继续同向恶化，仍未触及时值观察线，但已形成三连降/三连升通道。"
+  },
+  "items": {
+    "revenue": 108000.0,
+    "cost_of_sales": 79200.0,
+    "net_profit": 7300.0,
+    "accounts_receivable": 24800.0,
+    "inventory": 16800.0,
+    "total_assets": 159500.0,
+    "total_liabilities": 86600.0,
+    "total_equity": 72900.0,
+    "net_assets": 72900.0,
+    "current_assets": 75500.0,
+    "current_liabilities": 50500.0,
+    "operating_cash_flow": 6800.0,
+    "goodwill": 6000.0,
+    "selling_expense": 5500.0,
+    "admin_expense": 4300.0,
+    "rd_expense": 2900.0,
+    "finance_expense": 1700.0
+  }
+}

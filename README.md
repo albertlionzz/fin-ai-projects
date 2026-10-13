@@ -44,10 +44,10 @@ finrag/
 
 | | |
 |---|---|
-| 解决的问题 | 从两期财务数字里**发现异常**并说明依据 |
+| 解决的问题 | 从两期或多期财务数字里**发现异常**并说明依据 |
 | 核心产物 | 带回溯依据的异常清单 + 风险分与等级 |
 | 评测方式 | 规则召回率 / 误报率 / 可复算性 |
-| 实测 | 植入 7 类异常全命中，67 个测试通过 |
+| 实测 | 植入 7 类异常全命中，88 个测试通过；4 期趋势模式可识别单期阈值法漏掉的慢性恶化 |
 
 **核心立场：确定性优先，LLM 只在最后一环介入。**
 
@@ -56,12 +56,12 @@ finrag/
 
 ```
 finagent/
-├── src/finagent/models.py   财务指标 / 风险分（饱和函数）/ 等级映射
-├── src/finagent/rules.py    RuleBook 集中阈值 + 9 条规则 + RuleEngine
+├── src/finagent/models.py   财务指标 / 多期序列 / 风险分（饱和函数）/ 等级映射
+├── src/finagent/rules.py    RuleBook 集中阈值 + 10 条规则 + 持续性升级 + RuleEngine
 ├── src/finagent/agents.py   Extract / Audit / Report 三 Agent + Orchestrator
-├── src/finagent/render.py   终端摘要 + Markdown 报告
+├── src/finagent/render.py   终端摘要 + Markdown 报告（多期横向铺开）
 ├── scripts/run.py           CLI：analyze / extract / rules / batch
-└── tests/test_analysis.py   67 个单元测试
+└── tests/test_analysis.py   88 个单元测试
 ```
 
 ## 共享的工程约定
@@ -91,10 +91,21 @@ python -m unittest discover -s tests
 # --- 项目二 ---
 cd ../finagent
 export PYTHONPATH=src
+
+# 两期模式（7 类植入异常全命中）
 python scripts/run.py analyze \
     --cur  data/statements/示例制造_2025A.json \
     --prev data/statements/示例制造_2024A.json \
     --md   artifacts/report.md
+
+# 多期模式（≥3 期自动启用趋势规则与持续性升级）
+python scripts/run.py analyze \
+    --periods data/statements/长恒电子_2022A.json \
+              data/statements/长恒电子_2023A.json \
+              data/statements/长恒电子_2024A.json \
+              data/statements/长恒电子_2025A.json \
+    --md   artifacts/report_trend.md
+
 python -m unittest discover -s tests
 ```
 

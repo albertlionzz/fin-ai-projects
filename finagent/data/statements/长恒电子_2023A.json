@@ -1,0 +1,28 @@
+{
+  "period": "2023A",
+  "meta": {
+    "company": "长恒电子",
+    "unit": "万元",
+    "source": "模拟数据，用于多期趋势规则验证",
+    "note": "第 2 期。各项指标小幅走坏，单期均未触及时值观察线——温水煮青蛙阶段。"
+  },
+  "items": {
+    "revenue": 104000.0,
+    "cost_of_sales": 74900.0,
+    "net_profit": 8100.0,
+    "accounts_receivable": 21600.0,
+    "inventory": 15200.0,
+    "total_assets": 154500.0,
+    "total_liabilities": 80100.0,
+    "total_equity": 74400.0,
+    "net_assets": 74400.0,
+    "current_assets": 77000.0,
+    "current_liabilities": 47500.0,
+    "operating_cash_flow": 8400.0,
+    "goodwill": 6000.0,
+    "selling_expense": 5100.0,
+    "admin_expense": 3900.0,
+    "rd_expense": 2600.0,
+    "finance_expense": 1400.0
+  }
+}

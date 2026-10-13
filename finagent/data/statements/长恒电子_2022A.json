@@ -1,0 +1,28 @@
+{
+  "period": "2022A",
+  "meta": {
+    "company": "长恒电子",
+    "unit": "万元",
+    "source": "模拟数据，用于多期趋势规则验证",
+    "note": "基期。经营指标健康，作为趋势起点。"
+  },
+  "items": {
+    "revenue": 100000.0,
+    "cost_of_sales": 71000.0,
+    "net_profit": 8600.0,
+    "accounts_receivable": 19000.0,
+    "inventory": 14000.0,
+    "total_assets": 150000.0,
+    "total_liabilities": 75000.0,
+    "total_equity": 75000.0,
+    "net_assets": 75000.0,
+    "current_assets": 78000.0,
+    "current_liabilities": 45000.0,
+    "operating_cash_flow": 9800.0,
+    "goodwill": 6000.0,
+    "selling_expense": 4800.0,
+    "admin_expense": 3600.0,
+    "rd_expense": 2400.0,
+    "finance_expense": 1200.0
+  }
+}

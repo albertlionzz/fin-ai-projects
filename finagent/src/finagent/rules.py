@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Sequence
 
-from .models import FinancialStatement, Finding, Level
+from .models import FinancialStatement, Finding, Level, StatementSeries
 
 
 # ---------------------------------------------------------------- 规则簿
@@ -67,6 +67,13 @@ class RuleBook:
     # 单科目变动显著性（%，用于勾稽与波动扫描）
     line_item_swing_warn: float = 50.0
     line_item_swing_high: float = 100.0
+
+    # 多期趋势：信号需连续出现多少期才升级严重度。
+    # 3 是下限——2 期只能做同比，谈不上"趋势"。
+    trend_min_periods: int = 3
+
+    # 同向恶化判定：至少几项质量指标同步走坏才算结构性恶化。
+    trend_min_agree: int = 3
 
 
 # ---------------------------------------------------------------- 规则实现
@@ -332,6 +339,142 @@ def rule_line_item_swing(
     )
 
 
+# ---------------------------------------------------------------- 多期趋势规则
+#
+# 两条规则签名与上面不同：接收整个序列而非相邻两期。
+# 用 is_series_rule 标记区分，RuleEngine 据此选择调用方式。
+
+
+def _series_rule(fn):
+    fn.is_series_rule = True
+    return fn
+
+
+def _escalate(level: Level) -> Level:
+    """提升一级严重度。已在最高级则保持不变。"""
+    order = [Level.INFO, Level.WARN, Level.HIGH]
+    i = min(order.index(level) + 1, len(order) - 1)
+    return order[i]
+
+
+def _persistence_note(periods: list[str], escalated: bool) -> str:
+    span = f"{periods[0]}→{periods[-1]}"
+    if escalated:
+        return (
+            f"该信号在 {span} 连续 {len(periods) - 1} 个报告期重复出现，"
+            f"非孤立波动，已升级为{Level.HIGH.label}。"
+        )
+    return (
+        f"该信号在 {span} 连续 {len(periods) - 1} 个报告期重复出现，"
+        f"非孤立波动，属结构性问题。"
+    )
+
+
+def escalate_persistent_findings(
+    findings: list[Finding],
+    series: StatementSeries,
+    rb: RuleBook,
+) -> list[Finding]:
+    """对跨期持续出现的信号升级严重度。
+
+    这是多期趋势的核心机制，刻意做成"升级原发现"而不是"新增一条发现"：
+    新增会导致同一个问题在报告里出现两次，风险分也会被重复计算，
+    读者看到的是"4 项异常"实际只有 2 个问题。
+
+    判定标准：某条规则在最近 trend_min_periods-1 个相邻期配对上**全部**触发。
+    "连续"而非"累计"——中间断一期说明情况有变化，不能算持续。
+    """
+    if not series.has_trend(rb.trend_min_periods):
+        return findings
+
+    n_pairs = rb.trend_min_periods - 1
+    recent = series.trailing_pairs(n_pairs)
+    if len(recent) < n_pairs:
+        return findings
+
+    # 每条规则在多少个最近配对里触发过
+    fired: dict[str, int] = {}
+    for prev_s, cur_s in recent:
+        for rule in _PAIR_RULES:
+            try:
+                f = rule(cur_s, prev_s, rb)
+            except Exception:  # noqa: BLE001 — 与主引擎一致的隔离策略
+                continue
+            if f is not None:
+                fired[f.rule_id] = fired.get(f.rule_id, 0) + 1
+
+    out: list[Finding] = []
+    for f in findings:
+        if fired.get(f.rule_id, 0) == n_pairs:
+            new_level = _escalate(f.level)
+            escalated = new_level != f.level
+            f.level = new_level
+            f.detail = f.detail + _persistence_note(series.periods[-(n_pairs + 1):], escalated)
+            f.basis = (f.basis or "") + "；跨期持续性信号比单期跳变更能说明问题是结构性的"
+            f.confidence = min(1.0, f.confidence + 0.1)
+        out.append(f)
+    out.sort(key=lambda x: (-int(x.level), x.rule_id))
+    return out
+
+
+@_series_rule
+def rule_quality_deterioration(
+    series: StatementSeries, rb: RuleBook
+) -> Finding | None:
+    """多项盈利质量指标连续同向恶化。
+
+    与持续性升级互补：上面那条管"已触阈值的信号是否持续"，
+    这条管"没触阈值但一直在缓慢变坏"的情况。
+    毛利率每年降 1pct，单期看都够不上观察线，但连续四年就是明确的恶化通道——
+    这种"温水煮青蛙"式的问题恰恰是单期分析最容易漏掉的。
+    """
+    if not series.has_trend(rb.trend_min_periods):
+        return None
+
+    sts = series.statements
+    # (指标名, 取值函数, 恶化方向)  direction=-1 表示越小越坏
+    indicators: list[tuple[str, callable, int]] = [
+        ("毛利率", lambda s: s.gross_margin(), -1),
+        ("净利率", lambda s: s.net_margin(), -1),
+        ("经营现金流/净利润", lambda s: s.ocf_to_profit(), -1),
+        ("资产负债率", lambda s: s.debt_ratio(), +1),
+        ("流动比率", lambda s: s.current_ratio(), -1),
+    ]
+
+    worsening: list[str] = []
+    for name, getter, direction in indicators:
+        vals = [getter(s) for s in sts]
+        if any(v is None for v in vals):
+            continue
+        # 要求每一期都**实际**朝恶化方向走：严格大于 0。
+        # 早先用 >= 0（允许持平），结果四期完全相同的数据也被判为"同向恶化"——
+        # 持平既不是改善也不是恶化，报出来就是误报。
+        deltas = [(vals[i + 1] - vals[i]) * direction for i in range(len(vals) - 1)]
+        if all(d > 0 for d in deltas):
+            worsening.append(name)
+
+    if len(worsening) < rb.trend_min_agree:
+        return None
+
+    listed = "、".join(worsening)
+    return Finding(
+        rule_id="QUALITY_DRIFT",
+        level=Level.HIGH,
+        title=f"{len(worsening)} 项盈利质量指标连续 {len(sts)} 期同向恶化",
+        detail=(
+            f"{listed} 在 {sts[0].period}→{sts[-1].period} 期间持续走坏，"
+            f"每一期都朝同一方向变动。单项看可能均未触及时值观察线，"
+            f"但连续同向变动已构成明确的恶化通道，属于结构性问题。"
+        ),
+        items=["revenue", "net_profit", "operating_cash_flow"],
+        evidence={"worsening": worsening, "periods": series.periods},
+        basis=(
+            "单期阈值法会系统性漏掉'每期小幅恶化'型问题；"
+            "多指标同向连续变动是识别慢性恶化的补充维度"
+        ),
+    )
+
+
 # ---------------------------------------------------------------- 规则集
 
 
@@ -345,6 +488,12 @@ DEFAULT_RULES: tuple[Callable[..., Finding | None], ...] = (
     rule_goodwill_ratio,
     rule_margin_erosion,
     rule_line_item_swing,
+    rule_quality_deterioration,       # 多期趋势：最后跑，需要完整序列
+)
+
+# 两期规则集合，供持续性升级复用（顺序与 DEFAULT_RULES 前段一致）
+_PAIR_RULES: tuple[Callable[..., Finding | None], ...] = tuple(
+    r for r in DEFAULT_RULES if not getattr(r, "is_series_rule", False)
 )
 
 
@@ -356,13 +505,25 @@ class RuleEngine:
     rules: tuple[Callable[..., Finding | None], ...] = DEFAULT_RULES
 
     def run(
-        self, cur: FinancialStatement, prev: FinancialStatement
+        self,
+        cur: FinancialStatement,
+        prev: FinancialStatement,
+        series: StatementSeries | None = None,
     ) -> list[Finding]:
-        """跑全部规则，按严重度倒序返回（HIGH 在前）。"""
+        """跑全部规则，按严重度倒序返回（HIGH 在前）。
+
+        series 可选：传入多期序列时，额外执行趋势规则并对持续信号升级严重度。
+        只传两期时行为与之前完全一致——这是为了让现有调用方无感升级。
+        """
         out: list[Finding] = []
         for rule in self.rules:
             try:
-                f = rule(cur, prev, self.book)
+                if getattr(rule, "is_series_rule", False):
+                    if series is None or not series.has_trend(self.book.trend_min_periods):
+                        continue
+                    f = rule(series, self.book)
+                else:
+                    f = rule(cur, prev, self.book)
             except Exception as e:  # noqa: BLE001 — 单条规则失败不应拖垮整轮
                 out.append(
                     Finding(
@@ -377,5 +538,9 @@ class RuleEngine:
                 continue
             if f is not None:
                 out.append(f)
+
+        if series is not None:
+            out = escalate_persistent_findings(out, series, self.book)
+
         out.sort(key=lambda f: (-int(f.level), f.rule_id))
         return out

@@ -30,6 +30,7 @@ from .models import (
     FinancialStatement,
     Finding,
     Level,
+    StatementSeries,
 )
 from .rules import RuleBook, RuleEngine
 
@@ -294,16 +295,27 @@ class AuditAgent(Agent):
         super().__init__(name=name)
         self.engine = engine or RuleEngine()
 
-    def run(self, cur: FinancialStatement, prev: FinancialStatement) -> list[Finding]:
+    def run(
+        self,
+        cur: FinancialStatement,
+        prev: FinancialStatement,
+        series: StatementSeries | None = None,
+    ) -> list[Finding]:
         t0 = time.time()
-        findings = self.engine.run(cur, prev)
+        findings = self.engine.run(cur, prev, series=series)
         high = sum(1 for f in findings if f.level == Level.HIGH)
         warn = sum(1 for f in findings if f.level == Level.WARN)
-        self._log(
-            "rule_engine",
-            f"{len(self.engine.rules)} 条规则 → {len(findings)} 项发现（重大 {high} / 关注 {warn}）",
-            ms=(time.time() - t0) * 1000,
-        )
+        if series is not None and series.has_trend(self.engine.book.trend_min_periods):
+            detail = (
+                f"{len(self.engine.rules)} 条规则（含多期趋势）→ {len(findings)} 项发现"
+                f"（重大 {high} / 关注 {warn}），趋势区间 {series.periods[0]}→{series.periods[-1]}"
+            )
+        else:
+            detail = (
+                f"{len(self.engine.rules)} 条规则 → {len(findings)} 项发现"
+                f"（重大 {high} / 关注 {warn}）"
+            )
+        self._log("rule_engine", detail, ms=(time.time() - t0) * 1000)
         return findings
 
 
@@ -375,6 +387,12 @@ class ReportAgent(Agent):
             "资产负债率显著抬升，需结合有息负债期限结构判断再融资压力。"
             "重点核查短期借款到期安排与表外担保。",
         ),
+        (
+            "盈利质量趋势",
+            "QUALITY_DRIFT",
+            "多项盈利指标连续同向变动，说明是慢性恶化而非单期扰动。"
+            "重点核查成本结构变化、费用刚性与现金流回收周期的历史走势。",
+        ),
     )
 
     def _template_reasoning(self, findings: Sequence[Finding]) -> str:
@@ -425,16 +443,26 @@ class ReportAgent(Agent):
         blocks.append("### 对判断的整体影响")
         blocks.append("")
         n_high = len([f for f in findings if f.level == Level.HIGH])
-        if n_high >= 3:
-            blocks.append(
-                f"重大异常达 {n_high} 项且集中在收入与资产质量两条线索上，"
-                "说明问题不是孤立的科目波动，而可能来自同一套业务决策（如激进的渠道压货或并购扩张）。"
-                "在核查完成前，基于本期报表得出的盈利能力与资产安全结论都应视为不稳健。"
-            )
+        n_warn = len([f for f in findings if f.level == Level.WARN])
+        # 门槛与 risk_grade 的严重度档保持一致：只要存在重大异常，
+        # 就不能说"以关注项为主"。两处阈值不一致会产出自相矛盾的话。
+        if n_high >= 1:
+            if n_high >= 3:
+                blocks.append(
+                    f"重大异常达 {n_high} 项，问题不是孤立的科目波动，"
+                    "而可能来自同一套业务决策（如激进的渠道压货或并购扩张）。"
+                    "在核查完成前，基于本期报表得出的盈利能力与资产安全结论都应视为不稳健。"
+                )
+            else:
+                blocks.append(
+                    f"存在 {n_high} 项重大异常（另有 {n_warn} 项关注），"
+                    "已达到需要专项核查的程度。"
+                    "建议按上述顺序逐项核实，未完成前不宜据本期报表下确定性结论。"
+                )
         else:
             blocks.append(
-                "异常以关注项为主，尚未形成系统性风险特征。"
-                "建议按上述顺序核实，若关注项在下一期继续恶化，再升级为重大处理。"
+                f"异常以关注项为主（{n_warn} 项），尚未形成系统性风险特征。"
+                "建议按上述顺序向管理层问询，若下一期继续恶化，再升级为重大处理。"
             )
         return "\n".join(blocks)
 
@@ -481,12 +509,14 @@ class Orchestrator:
         prev: FinancialStatement,
         company: str | None = None,
         period: str | None = None,
+        series: StatementSeries | None = None,
     ) -> AnalysisResult:
         company = company or str(cur.meta.get("company") or "未命名主体")
         period = period or cur.period
 
         # 环节 2：合规校验（环节 1 的数据提取已完成，输入即结构化报表）
-        findings = self.audit.run(cur, prev)
+        # 传入 series 时启用多期趋势规则；不传则退化为纯两期分析，行为不变。
+        findings = self.audit.run(cur, prev, series=series)
 
         # 环节 3：结论生成
         summary = self.report.summarize(company, period, findings)
@@ -498,6 +528,12 @@ class Orchestrator:
             "previous": {k: (round(v, 2) if isinstance(v, float) else v) for k, v in prev.ratios().items()},
             "items_count": {"current": len(cur.items), "previous": len(prev.items)},
         }
+        if series is not None:
+            metrics["series"] = {
+                "periods": series.periods,
+                "n_periods": len(series),
+                "trend_enabled": series.has_trend(3),
+            }
 
         return AnalysisResult(
             company=company,

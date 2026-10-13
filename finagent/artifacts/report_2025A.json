@@ -142,15 +142,13 @@
     {
       "agent": "audit",
       "action": "rule_engine",
-      "detail": "9 条规则 → 7 项发现（重大 4 / 关注 3）",
-      "duration_ms": 0.09918212890625,
+      "detail": "10 条规则 → 7 项发现（重大 4 / 关注 3）",
       "ok": true
     },
     {
       "agent": "report",
       "action": "template_reasoning",
       "detail": "未接 LLM，使用确定性聚合模板",
-      "duration_ms": 0.0,
       "ok": true
     }
   ],
