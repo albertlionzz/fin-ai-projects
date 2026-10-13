@@ -1,0 +1,209 @@
+{
+  "meta": {
+    "version": "1.0",
+    "note": "每条标注 gold = 相关条款号（section_no 匹配）+ gold_keywords（必须出现在答案中的关键事实）",
+    "usage": "用于计算 recall@k / MRR / 引用正确率；修改分块策略后重跑即可量化收益"
+  },
+  "cases": [
+    {
+      "id": "q01",
+      "question": "出差住宿费在一线城市能报多少？",
+      "gold": ["3.1"],
+      "gold_keywords": ["650", "450"],
+      "category": "金额标准",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q02",
+      "question": "总监级以下员工在一线城市的住宿费限额是多少",
+      "gold": ["3.1"],
+      "gold_keywords": ["450"],
+      "category": "金额标准",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q03",
+      "question": "伙食补助一天有多少钱？",
+      "gold": ["3.2"],
+      "gold_keywords": ["120"],
+      "category": "金额标准",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q04",
+      "question": "当天往返的出差伙食补助怎么算",
+      "gold": ["3.2", "2.2"],
+      "gold_keywords": ["60", "半天"],
+      "category": "金额标准",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q05",
+      "question": "市内交通费每天包干多少钱，需要发票吗",
+      "gold": ["3.3"],
+      "gold_keywords": ["80", "不需提供发票"],
+      "category": "金额标准",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q06",
+      "question": "出差什么时候该填出差申请单，找谁审批",
+      "gold": ["2.1"],
+      "gold_keywords": ["出差申请单", "审批"],
+      "category": "流程",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q07",
+      "question": "副经理级人员出差由谁审批",
+      "gold": ["2.1"],
+      "gold_keywords": ["总经理"],
+      "category": "审批权限",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q08",
+      "question": "报销单要在出差回来多少个工作日内提交",
+      "gold": ["4.1"],
+      "gold_keywords": ["15"],
+      "category": "时限",
+      "difficulty": "easy"
+    },
+    {
+      "id": "q09",
+      "question": "住宿费超标了能全额报销吗",
+      "gold": ["3.4", "4.3"],
+      "gold_keywords": ["超标"],
+      "category": "超标处理",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q10",
+      "question": "业务招待费单次最多能报多少",
+      "gold": ["3.1"],
+      "gold_keywords": ["3000", "1000"],
+      "category": "金额标准",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q11",
+      "question": "招待费单次超过 12 个人要怎么走审批",
+      "gold": ["3.1"],
+      "gold_keywords": ["12", "分管领导"],
+      "category": "审批权限",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q12",
+      "question": "一般报销单据多少天内必须提交，超过多久不受理",
+      "gold": ["2.1"],
+      "gold_keywords": ["30", "60"],
+      "category": "时限",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q13",
+      "question": "咨询服务费能不能先付款后补协议",
+      "gold": ["5.1"],
+      "gold_keywords": ["拒付"],
+      "category": "合规红线",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q14",
+      "question": "一笔 30 万的费用该谁审批",
+      "gold": ["6.1"],
+      "gold_keywords": ["总经理"],
+      "category": "审批权限",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q15",
+      "question": "费用超过 100 万要走什么程序",
+      "gold": ["6.1"],
+      "gold_keywords": ["董事长办公会"],
+      "category": "审批权限",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q16",
+      "question": "差旅预借款最高能借多少比例",
+      "gold": ["4.4"],
+      "gold_keywords": ["80"],
+      "category": "借款",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q17",
+      "question": "发票抬头应该怎么写，税号有什么要求",
+      "gold": ["4.2"],
+      "gold_keywords": ["全称"],
+      "category": "凭证要求",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q18",
+      "question": "会议费每人每天标准是多少，没有签到表会怎样",
+      "gold": ["4.1", "4.2"],
+      "gold_keywords": ["400", "签到表"],
+      "category": "会议费",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q19",
+      "question": "总监级人员坐飞机可以买公务舱吗",
+      "gold": ["3.4"],
+      "gold_keywords": ["公务舱", "批准"],
+      "category": "差旅标准",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q20",
+      "question": "能不能把大额报销拆成几笔分别审批",
+      "gold": ["6.2"],
+      "gold_keywords": ["拆分", "退回"],
+      "category": "合规红线",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q21",
+      "question": "招待费发票可以用定额发票吗",
+      "gold": ["3.3"],
+      "gold_keywords": ["定额发票"],
+      "category": "凭证要求",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q22",
+      "question": "跨年的报销单什么时候必须交完",
+      "gold": ["2.3"],
+      "gold_keywords": ["1 月 10"],
+      "category": "时限",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q23",
+      "question": "紧急事项可以先口头批准吗",
+      "gold": ["6.1"],
+      "gold_keywords": ["口头", "5 个工作日"],
+      "category": "流程",
+      "difficulty": "hard"
+    },
+    {
+      "id": "q24",
+      "question": "咨询费付款前需要做什么",
+      "gold": ["5.2"],
+      "gold_keywords": ["验收"],
+      "category": "流程",
+      "difficulty": "medium"
+    },
+    {
+      "id": "q25",
+      "question": "单据能不能用订书钉装订",
+      "gold": ["2.2"],
+      "gold_keywords": ["胶水", "订书钉"],
+      "category": "凭证要求",
+      "difficulty": "hard"
+    }
+  ]
+}

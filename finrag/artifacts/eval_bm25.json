@@ -1,0 +1,642 @@
+{
+  "mode": "bm25",
+  "metrics": {
+    "recall_at_1": 0.96,
+    "recall_at_3": 1.0,
+    "recall_at_5": 1.0,
+    "mrr": 0.98,
+    "keyword_coverage": 0.86,
+    "citation_precision": 0.22400000000000003,
+    "hallucination_rate": 0.0
+  },
+  "cases": [
+    {
+      "case_id": "q01",
+      "question": "出差住宿费在一线城市能报多少？",
+      "category": "金额标准",
+      "difficulty": "easy",
+      "gold_sections": [
+        "3.1"
+      ],
+      "hit_sections": [
+        "3.1",
+        "2.2",
+        "1.1",
+        "4.3",
+        "3.3"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 0.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "出差天数按自然日计算，当日往返按半天计。出发和返程当日不计住宿费，但交通费据实报销。（相关条款：3.1 住宿费标准；2.1 审批权限）"
+    },
+    {
+      "case_id": "q02",
+      "question": "总监级以下员工在一线城市的住宿费限额是多少",
+      "category": "金额标准",
+      "difficulty": "medium",
+      "gold_sections": [
+        "3.1"
+      ],
+      "hit_sections": [
+        "3.1",
+        "3.4",
+        "1.1",
+        "2.1",
+        "6.1"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "公司员工住宿费执行限额标准：一线城市（北京、上海、广州、深圳）总监级及以上人员每晚不超过 650 元，其他人员每晚不超过 450 元；二线城市总监级及以上每晚不"
+    },
+    {
+      "case_id": "q03",
+      "question": "伙食补助一天有多少钱？",
+      "category": "金额标准",
+      "difficulty": "easy",
+      "gold_sections": [
+        "3.2"
+      ],
+      "hit_sections": [
+        "3.2",
+        "1.1",
+        "4.3",
+        "6.2",
+        "4.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "伙食补助按出差自然日计算，不需提供发票，每人每天 120 元。出差当日往返的，补助按半天计算，计 60 元。伙食补助不得与酒店早餐重复计取。（相关条款：1.1 "
+    },
+    {
+      "case_id": "q04",
+      "question": "当天往返的出差伙食补助怎么算",
+      "category": "金额标准",
+      "difficulty": "medium",
+      "gold_sections": [
+        "2.2",
+        "3.2"
+      ],
+      "hit_sections": [
+        "3.2",
+        "2.2",
+        "1.1",
+        "4.3",
+        "3.3"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.4,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "伙食补助按出差自然日计算，不需提供发票，每人每天 120 元。出差当日往返的，补助按半天计算，计 60 元。伙食补助不得与酒店早餐重复计取。（相关条款：2.2 "
+    },
+    {
+      "case_id": "q05",
+      "question": "市内交通费每天包干多少钱，需要发票吗",
+      "category": "金额标准",
+      "difficulty": "easy",
+      "gold_sections": [
+        "3.3"
+      ],
+      "hit_sections": [
+        "3.3",
+        "1.1",
+        "3.2",
+        "4.3",
+        "3.3"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.4,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "市内交通费每人每天包干 80 元，不需提供发票，据实发放。出差期间发生的出租车费用应保留行程单。（相关条款：1.1 适用范围；3.3 发票要求）"
+    },
+    {
+      "case_id": "q06",
+      "question": "出差什么时候该填出差申请单，找谁审批",
+      "category": "流程",
+      "difficulty": "medium",
+      "gold_sections": [
+        "2.1"
+      ],
+      "hit_sections": [
+        "2.1",
+        "4.1",
+        "4.4",
+        "2.2",
+        "1.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "部门经理级及以下人员出差由分管领导审批；部门副经理级及以上人员出差由总经理审批；董事长出差无需事前审批但须事后报备。一般员工申请出差应填写《出差申请单》，注明出"
+    },
+    {
+      "case_id": "q07",
+      "question": "副经理级人员出差由谁审批",
+      "category": "审批权限",
+      "difficulty": "medium",
+      "gold_sections": [
+        "2.1"
+      ],
+      "hit_sections": [
+        "2.1",
+        "3.4",
+        "1.2",
+        "6.1",
+        "3.1"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "部门经理级及以下人员出差由分管领导审批；部门副经理级及以上人员出差由总经理审批；董事长出差无需事前审批但须事后报备。一般员工申请出差应填写《出差申请单》，注明出"
+    },
+    {
+      "case_id": "q08",
+      "question": "报销单要在出差回来多少个工作日内提交",
+      "category": "时限",
+      "difficulty": "easy",
+      "gold_sections": [
+        "4.1"
+      ],
+      "hit_sections": [
+        "4.1",
+        "4.4",
+        "2.1",
+        "6.1",
+        "4.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "员工应在出差结束返回后 15 个工作日内办理报销手续。超过 15 个工作日的需在报销单中说明原因并由部门经理签字确认。超过 3 个月未办理的，原则上不予受理，特"
+    },
+    {
+      "case_id": "q09",
+      "question": "住宿费超标了能全额报销吗",
+      "category": "超标处理",
+      "difficulty": "hard",
+      "gold_sections": [
+        "3.4",
+        "4.3"
+      ],
+      "hit_sections": [
+        "4.3",
+        "3.1",
+        "1.1",
+        "2.2",
+        "3.1"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "住宿费、伙食补助、市内交通费超出标准的部分原则上由个人承担。因展会、重大会议等客观原因导致超标，须提供主办方通知等证明材料，经分管领导审批后据实报销。（相关条款"
+    },
+    {
+      "case_id": "q10",
+      "question": "业务招待费单次最多能报多少",
+      "category": "金额标准",
+      "difficulty": "medium",
+      "gold_sections": [
+        "3.1"
+      ],
+      "hit_sections": [
+        "3.1",
+        "3.3",
+        "3.2",
+        "1.2",
+        "6.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "业务招待费实行总额控制与事前审批相结合。总监级及以上人员单次招待费用不超过 3000 元，其他人员单次不超过 1000 元。单次招待人数超过 12 人的，须报分"
+    },
+    {
+      "case_id": "q11",
+      "question": "招待费单次超过 12 个人要怎么走审批",
+      "category": "审批权限",
+      "difficulty": "hard",
+      "gold_sections": [
+        "3.1"
+      ],
+      "hit_sections": [
+        "3.1",
+        "3.2",
+        "3.3",
+        "4.1",
+        "1.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.4,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "业务招待费实行总额控制与事前审批相结合。总监级及以上人员单次招待费用不超过 3000 元，其他人员单次不超过 1000 元。单次招待人数超过 12 人的，须报分"
+    },
+    {
+      "case_id": "q12",
+      "question": "一般报销单据多少天内必须提交，超过多久不受理",
+      "category": "时限",
+      "difficulty": "medium",
+      "gold_sections": [
+        "2.1"
+      ],
+      "hit_sections": [
+        "2.1",
+        "6.2",
+        "4.1",
+        "4.2",
+        "2.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "员工报销单据应在费用发生后 30 日内提交财务部审核。因特殊原因无法按时提交的，应在报销单中书面说明原因，报部门负责人审批。超过 60 日的报销单原则上不予受理"
+    },
+    {
+      "case_id": "q13",
+      "question": "咨询服务费能不能先付款后补协议",
+      "category": "合规红线",
+      "difficulty": "hard",
+      "gold_sections": [
+        "5.1"
+      ],
+      "hit_sections": [
+        "5.1",
+        "5.2",
+        "1.2",
+        "4.1",
+        "4.4"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "聘用外部咨询机构须签订正式顾问协议或合同，协议须明确服务内容、服务期限、费用金额及成果交付要求，并经法务部审核、财务部备案。**先付费后补协议**或**无协议付"
+    },
+    {
+      "case_id": "q14",
+      "question": "一笔 30 万的费用该谁审批",
+      "category": "审批权限",
+      "difficulty": "medium",
+      "gold_sections": [
+        "6.1"
+      ],
+      "hit_sections": [
+        "6.1",
+        "1.2",
+        "6.2",
+        "2.1",
+        "2.3"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "单笔金额 5 万元以下的费用，由部门经理审批；5 万元（含）至 20 万元的，由分管领导审批；20 万元（含）至 100 万元的，由总经理审批；100 万元以上"
+    },
+    {
+      "case_id": "q15",
+      "question": "费用超过 100 万要走什么程序",
+      "category": "审批权限",
+      "difficulty": "medium",
+      "gold_sections": [
+        "6.1"
+      ],
+      "hit_sections": [
+        "6.1",
+        "3.1",
+        "4.1",
+        "3.1",
+        "3.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 0.0,
+      "citation_precision": 0.0,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "公司员工住宿费执行限额标准：一线城市（北京、上海、广州、深圳）总监级及以上人员每晚不超过 650 元，其他人员每晚不超过 450 元；二线城市总监级及以上每晚不"
+    },
+    {
+      "case_id": "q16",
+      "question": "差旅预借款最高能借多少比例",
+      "category": "借款",
+      "difficulty": "medium",
+      "gold_sections": [
+        "4.4"
+      ],
+      "hit_sections": [
+        "4.4",
+        "3.4",
+        "2.1",
+        "4.2",
+        "6.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "员工可申请出差预借款，金额原则上不超过预计费用总额的 80%。预借款应在出差结束后 10 个工作日内冲抵完毕，逾期未冲抵的，从当月工资中暂扣，并暂停其新的借款申"
+    },
+    {
+      "case_id": "q17",
+      "question": "发票抬头应该怎么写，税号有什么要求",
+      "category": "凭证要求",
+      "difficulty": "medium",
+      "gold_sections": [
+        "4.2"
+      ],
+      "hit_sections": [
+        "4.2",
+        "3.3",
+        "2.2",
+        "2.1",
+        "3.3"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "差旅费报销须提供合规发票原件及电子行程单。飞机票须附登机牌复印件，火车票须附取票信息。发票抬头须为公司全称，税号须准确，金额须与实际消费一致。发票信息与行程单不"
+    },
+    {
+      "case_id": "q18",
+      "question": "会议费每人每天标准是多少，没有签到表会怎样",
+      "category": "会议费",
+      "difficulty": "hard",
+      "gold_sections": [
+        "4.1",
+        "4.2"
+      ],
+      "hit_sections": [
+        "4.2",
+        "4.1",
+        "3.3",
+        "3.2",
+        "4.3"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 0.5,
+      "citation_precision": 0.4,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "会议现场照片、会议通知、签到表及会议材料清单应随报销单一并提交。缺少签到表的会议费不予报销。（相关条款：4.1 审批与标准；3.2 伙食补助标准）"
+    },
+    {
+      "case_id": "q19",
+      "question": "总监级人员坐飞机可以买公务舱吗",
+      "category": "差旅标准",
+      "difficulty": "hard",
+      "gold_sections": [
+        "3.4"
+      ],
+      "hit_sections": [
+        "3.4",
+        "3.1",
+        "3.1",
+        "2.1",
+        "4.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "总监级及以上人员出差可乘坐飞机经济舱、火车一等座、高铁一等座；其他人员乘坐飞机经济舱、火车二等座、高铁二等座。总监级以上人员因工作需要可乘坐公务舱，需事前报总经"
+    },
+    {
+      "case_id": "q20",
+      "question": "能不能把大额报销拆成几笔分别审批",
+      "category": "合规红线",
+      "difficulty": "hard",
+      "gold_sections": [
+        "6.2"
+      ],
+      "hit_sections": [
+        "6.2",
+        "6.1",
+        "4.3",
+        "5.2",
+        "3.1"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "超过审批权限的报销单，不得拆分为多笔规避审批。财务部对疑似拆分报销的单据有权退回并上报总经办。（相关条款：6.1 金额分级审批；4.3 超标处理）"
+    },
+    {
+      "case_id": "q21",
+      "question": "招待费发票可以用定额发票吗",
+      "category": "凭证要求",
+      "difficulty": "hard",
+      "gold_sections": [
+        "3.3"
+      ],
+      "hit_sections": [
+        "3.3",
+        "3.1",
+        "3.2",
+        "4.2",
+        "1.2"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "业务招待费发票必须为增值税普通发票或专用发票，抬头为公司全称。定额发票、通用机打发票不可单独作为业务招待费的报销凭证，须附消费明细清单。（相关条款：1.2 适用"
+    },
+    {
+      "case_id": "q22",
+      "question": "跨年的报销单什么时候必须交完",
+      "category": "时限",
+      "difficulty": "hard",
+      "gold_sections": [
+        "2.3"
+      ],
+      "hit_sections": [
+        "2.3",
+        "3.3",
+        "2.1",
+        "6.2",
+        "4.1"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 0.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "员工报销单据应在费用发生后 30 日内提交财务部审核。因特殊原因无法按时提交的，应在报销单中书面说明原因，报部门负责人审批。超过 60 日的报销单原则上不予受理"
+    },
+    {
+      "case_id": "q23",
+      "question": "紧急事项可以先口头批准吗",
+      "category": "流程",
+      "difficulty": "hard",
+      "gold_sections": [
+        "6.1"
+      ],
+      "hit_sections": [
+        "6.1",
+        "3.4",
+        "2.1",
+        "3.1",
+        "3.1"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "单笔金额 5 万元以下的费用，由部门经理审批；5 万元（含）至 20 万元的，由分管领导审批；20 万元（含）至 100 万元的，由总经理审批；100 万元以上"
+    },
+    {
+      "case_id": "q24",
+      "question": "咨询费付款前需要做什么",
+      "category": "流程",
+      "difficulty": "medium",
+      "gold_sections": [
+        "5.2"
+      ],
+      "hit_sections": [
+        "5.1",
+        "5.2",
+        "3.4",
+        "1.2",
+        "4.4"
+      ],
+      "reciprocal_rank": 0.5,
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "聘用外部咨询机构须签订正式顾问协议或合同，协议须明确服务内容、服务期限、费用金额及成果交付要求，并经法务部审核、财务部备案。**先付费后补协议**或**无协议付"
+    },
+    {
+      "case_id": "q25",
+      "question": "单据能不能用订书钉装订",
+      "category": "凭证要求",
+      "difficulty": "hard",
+      "gold_sections": [
+        "2.2"
+      ],
+      "hit_sections": [
+        "2.2",
+        "2.1",
+        "6.2",
+        "5.1",
+        "3.3"
+      ],
+      "reciprocal_rank": 1.0,
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "recall_at_5": 1,
+      "keyword_coverage": 1.0,
+      "citation_precision": 0.2,
+      "hallucinated": 0,
+      "grounded": true,
+      "top_answer": "报销单据应统一使用胶水粘贴，不得使用订书钉、回形针装订。单据粘贴应保持票面平整，重要凭证如发票、合同复印件应附在报销单之后。电子发票需打印纸质版并由开票人签字确"
+    }
+  ]
+}

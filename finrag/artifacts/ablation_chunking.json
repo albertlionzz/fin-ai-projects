@@ -1,0 +1,74 @@
+[
+  {
+    "min_len": 20,
+    "max_len": 300,
+    "n_chunks": 28,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 20,
+    "max_len": 600,
+    "n_chunks": 28,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 20,
+    "max_len": 900,
+    "n_chunks": 28,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 40,
+    "max_len": 300,
+    "n_chunks": 28,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 40,
+    "max_len": 600,
+    "n_chunks": 28,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 40,
+    "max_len": 900,
+    "n_chunks": 28,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 60,
+    "max_len": 300,
+    "n_chunks": 27,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 60,
+    "max_len": 600,
+    "n_chunks": 27,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  },
+  {
+    "min_len": 60,
+    "max_len": 900,
+    "n_chunks": 27,
+    "recall@1": 0.96,
+    "recall@5": 1.0,
+    "mrr": 0.98
+  }
+]

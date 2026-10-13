@@ -1,0 +1,182 @@
+{
+  "company": "示例制造股份",
+  "period": "2025A",
+  "findings": [
+    {
+      "rule_id": "AR_GAP",
+      "level": 2,
+      "title": "应收账款增速显著快于营业收入",
+      "detail": "应收账款同比 +64.3%，营业收入同比 +8.0%，剪刀差 56.3 个百分点（观察线 20pct）。收入可能依赖放宽信用政策实现，回款质量存疑。",
+      "items": [
+        "accounts_receivable",
+        "revenue"
+      ],
+      "evidence": {
+        "receivable_yoy": 64.29,
+        "revenue_yoy": 8.0,
+        "gap_pct": 56.29
+      },
+      "basis": "应收增速与营收增速的剪刀差是收入质量恶化的经典先行指标",
+      "confidence": 1.0,
+      "level_label": "重大"
+    },
+    {
+      "rule_id": "INV_GAP",
+      "level": 2,
+      "title": "存货增速显著快于营业收入",
+      "detail": "存货同比 +60.0%，营业收入同比 +8.0%，剪刀差 52.0 个百分点。存在存货积压或跌价准备计提不充分的风险。",
+      "items": [
+        "inventory",
+        "revenue"
+      ],
+      "evidence": {
+        "inventory_yoy": 60.0,
+        "revenue_yoy": 8.0,
+        "gap_pct": 52.0
+      },
+      "basis": "存货增速持续高于营收增速通常指向滞销或减值计提不足",
+      "confidence": 1.0,
+      "level_label": "重大"
+    },
+    {
+      "rule_id": "OCF_DIVERGE",
+      "level": 2,
+      "title": "经营现金流与净利润背离",
+      "detail": "经营活动现金流 / 净利润 = 0.38（健康观察线 ≥ 0.8）。利润的现金含量偏低，需关注是否存在纸面利润或回款恶化。",
+      "items": [
+        "operating_cash_flow",
+        "net_profit"
+      ],
+      "evidence": {
+        "ocf_to_profit": 0.381
+      },
+      "basis": "长期看经营现金流应匹配净利润，持续背离是盈余质量偏弱的直接证据",
+      "confidence": 1.0,
+      "level_label": "重大"
+    },
+    {
+      "rule_id": "SWING_SCAN",
+      "level": 2,
+      "title": "存在 10 个科目同比大幅波动",
+      "detail": "波动超过 ±50% 的科目：goodwill +400.0%；finance_expense +140.0%；selling_expense +84.6%；operating_cash_flow -73.6%；accounts_receivable +64.3%；current_liabilities +61.5%…。建议逐项核查原始凭证。",
+      "items": [
+        "goodwill",
+        "finance_expense",
+        "selling_expense",
+        "operating_cash_flow",
+        "accounts_receivable",
+        "current_liabilities"
+      ],
+      "evidence": {
+        "swings": {
+          "goodwill": 400.0,
+          "finance_expense": 140.0,
+          "selling_expense": 84.62,
+          "operating_cash_flow": -73.63,
+          "accounts_receivable": 64.29,
+          "current_liabilities": 61.54
+        },
+        "total_flagged": 10
+      },
+      "basis": "科目异常波动扫描用于全面覆盖，避免专项规则遗漏",
+      "confidence": 1.0,
+      "level_label": "重大"
+    },
+    {
+      "rule_id": "DEBT_RATIO",
+      "level": 1,
+      "title": "资产负债率处于高位",
+      "detail": "资产负债率 73.33%（观察线 70%），上年同期 54.76%（+18.57pct）。偿债压力与再融资能力需一并评估。",
+      "items": [
+        "total_liabilities",
+        "total_assets"
+      ],
+      "evidence": {
+        "debt_ratio": 73.33,
+        "prev_debt_ratio": 54.76
+      },
+      "basis": "资产负债率是杠杆水平与偿债风险的基础度量",
+      "confidence": 1.0,
+      "level_label": "关注"
+    },
+    {
+      "rule_id": "GOODWILL",
+      "level": 1,
+      "title": "商誉占净资产比重偏高",
+      "detail": "商誉 21,000 万元，占净资产 40.38%（观察线 30%）。若被并购标的业绩不达预期，存在集中减值风险。",
+      "items": [
+        "goodwill",
+        "net_assets"
+      ],
+      "evidence": {
+        "goodwill": 21000.0,
+        "net_assets": 52000.0,
+        "goodwill_ratio": 40.38
+      },
+      "basis": "商誉/净资产是并购减值风险敞口的惯用度量",
+      "confidence": 1.0,
+      "level_label": "关注"
+    },
+    {
+      "rule_id": "MARGIN_EROSION",
+      "level": 1,
+      "title": "营业收入增长但净利率下滑",
+      "detail": "营业收入同比 +8.0%，净利率由 8.20% 降至 5.83%（-2.37pct）。规模扩张未转化为盈利改善，需核查费用或成本端。",
+      "items": [
+        "revenue",
+        "net_profit"
+      ],
+      "evidence": {
+        "revenue_yoy": 8.0,
+        "net_margin_prev": 8.2,
+        "net_margin_cur": 5.83
+      },
+      "basis": "增收不增利是盈利质量恶化的典型形态",
+      "confidence": 1.0,
+      "level_label": "关注"
+    }
+  ],
+  "summary": "示例制造股份 2025A 共触发 7 项异常：重大 4 项、关注 3 项。 需优先核查：应收账款增速显著快于营业收入；存货增速显著快于营业收入；经营现金流与净利润背离。",
+  "reasoning": "### 主线索归因\n\n- **收入质量**（命中 3 项：`AR_GAP`、`OCF_DIVERGE`、`MARGIN_EROSION`）\n  应收增速跑赢营收、现金流与利润背离、增收不增利同时出现，指向收入确认偏松或放宽信用换收入。重点核查前五大客户账龄、期后退款与信用政策变更记录。\n- **资产质量**（命中 3 项：`INV_GAP`、`GOODWILL`、`SWING_SCAN`）\n  存货增速远超营收、商誉占净资产比重偏高，且存在多科目大幅波动，指向资产端减值计提可能不足。重点核查存货库龄结构与商誉减值测试假设。\n- **偿债能力**（命中 1 项：`DEBT_RATIO`）\n  资产负债率显著抬升，需结合有息负债期限结构判断再融资压力。重点核查短期借款到期安排与表外担保。\n\n### 建议核查顺序\n\n1. **应收账款增速显著快于营业收入**（`AR_GAP`）—— 应收增速与营收增速的剪刀差是收入质量恶化的经典先行指标\n2. **存货增速显著快于营业收入**（`INV_GAP`）—— 存货增速持续高于营收增速通常指向滞销或减值计提不足\n3. **经营现金流与净利润背离**（`OCF_DIVERGE`）—— 长期看经营现金流应匹配净利润，持续背离是盈余质量偏弱的直接证据\n4. **存在 10 个科目同比大幅波动**（`SWING_SCAN`）—— 科目异常波动扫描用于全面覆盖，避免专项规则遗漏\n\n### 对判断的整体影响\n\n重大异常达 4 项且集中在收入与资产质量两条线索上，说明问题不是孤立的科目波动，而可能来自同一套业务决策（如激进的渠道压货或并购扩张）。在核查完成前，基于本期报表得出的盈利能力与资产安全结论都应视为不稳健。",
+  "trace": [
+    {
+      "agent": "audit",
+      "action": "rule_engine",
+      "detail": "9 条规则 → 7 项发现（重大 4 / 关注 3）",
+      "duration_ms": 0.09918212890625,
+      "ok": true
+    },
+    {
+      "agent": "report",
+      "action": "template_reasoning",
+      "detail": "未接 LLM，使用确定性聚合模板",
+      "duration_ms": 0.0,
+      "ok": true
+    }
+  ],
+  "metrics": {
+    "current": {
+      "gross_margin": 23.52,
+      "net_margin": 5.83,
+      "debt_ratio": 73.33,
+      "current_ratio": 1.14,
+      "ocf_to_profit": 0.38,
+      "roe": 12.12
+    },
+    "previous": {
+      "gross_margin": 28.0,
+      "net_margin": 8.2,
+      "debt_ratio": 54.76,
+      "current_ratio": 1.69,
+      "ocf_to_profit": 1.11,
+      "roe": 10.79
+    },
+    "items_count": {
+      "current": 17,
+      "previous": 17
+    }
+  },
+  "risk_score": 92.57,
+  "risk_grade": "极高",
+  "risk_action": "建议暂缓出具结论，先对全部重大异常逐项核查原始凭证"
+}

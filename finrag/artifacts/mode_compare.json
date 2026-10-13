@@ -1,0 +1,26 @@
+[
+  {
+    "mode": "bm25",
+    "recall@1": 0.96,
+    "recall@3": 1.0,
+    "recall@5": 1.0,
+    "mrr": 0.98,
+    "keyword_coverage": 0.86
+  },
+  {
+    "mode": "vector",
+    "recall@1": 0.84,
+    "recall@3": 0.92,
+    "recall@5": 0.96,
+    "mrr": 0.8813333333333334,
+    "keyword_coverage": 0.86
+  },
+  {
+    "mode": "hybrid",
+    "recall@1": 0.84,
+    "recall@3": 0.96,
+    "recall@5": 0.96,
+    "mrr": 0.9,
+    "keyword_coverage": 0.86
+  }
+]

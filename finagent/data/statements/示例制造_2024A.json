@@ -1,0 +1,28 @@
+{
+  "period": "2024A",
+  "meta": {
+    "company": "示例制造股份",
+    "unit": "万元",
+    "source": "模拟数据，用于规则引擎验证",
+    "note": "对照期。除轻微波动外无异常，作为健康基准。"
+  },
+  "items": {
+    "revenue": 100000.0,
+    "cost_of_sales": 72000.0,
+    "net_profit": 8200.0,
+    "accounts_receivable": 21000.0,
+    "inventory": 15000.0,
+    "total_assets": 168000.0,
+    "total_liabilities": 92000.0,
+    "total_equity": 76000.0,
+    "net_assets": 76000.0,
+    "current_assets": 88000.0,
+    "current_liabilities": 52000.0,
+    "operating_cash_flow": 9100.0,
+    "goodwill": 4200.0,
+    "selling_expense": 5200.0,
+    "admin_expense": 3800.0,
+    "rd_expense": 2600.0,
+    "finance_expense": 1500.0
+  }
+}

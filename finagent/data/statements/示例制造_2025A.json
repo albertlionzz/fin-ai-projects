@@ -1,0 +1,28 @@
+{
+  "period": "2025A",
+  "meta": {
+    "company": "示例制造股份",
+    "unit": "万元",
+    "source": "模拟数据，用于规则引擎验证",
+    "note": "当期。刻意植入 5 类典型异常，用于验证规则引擎能否全部命中。"
+  },
+  "items": {
+    "revenue": 108000.0,
+    "cost_of_sales": 82600.0,
+    "net_profit": 6300.0,
+    "accounts_receivable": 34500.0,
+    "inventory": 24000.0,
+    "total_assets": 195000.0,
+    "total_liabilities": 143000.0,
+    "total_equity": 52000.0,
+    "net_assets": 52000.0,
+    "current_assets": 96000.0,
+    "current_liabilities": 84000.0,
+    "operating_cash_flow": 2400.0,
+    "goodwill": 21000.0,
+    "selling_expense": 9600.0,
+    "admin_expense": 6100.0,
+    "rd_expense": 4200.0,
+    "finance_expense": 3600.0
+  }
+}
