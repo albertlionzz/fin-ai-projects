@@ -30,10 +30,22 @@ from finagent import (  # noqa: E402
     ReportAgent,
     StatementSeries,
     build_series,
+    load_benchmarks,
     load_pair,
     render_console,
     render_markdown,
 )
+from finagent.abcompare import (  # noqa: E402
+    check_coverage,
+    check_fidelity,
+    check_restatement,
+    determinism_ratio,
+    evaluate,
+    extract_numbers,
+    number_pool,
+)
+from finagent.benchmarks import BenchmarkBook, IndustryBenchmark  # noqa: E402
+from finagent.models import DEFAULT_POLICY, ScorePolicy  # noqa: E402
 from finagent.rules import (  # noqa: E402
     RuleBook,
     RuleEngine,
@@ -46,8 +58,13 @@ from finagent.rules import (  # noqa: E402
     rule_margin_erosion,
     rule_receivable_growth_gap,
 )
+from finagent.workpaper import (  # noqa: E402
+    build_working_paper,
+    render_workpaper_markdown,
+)
 
 STMT_DIR = ROOT / "data" / "statements"
+BENCH_PATH = ROOT / "data" / "benchmarks" / "industry_benchmarks.json"
 RB = RuleBook()
 
 
@@ -877,6 +894,446 @@ class TestEvalSet(unittest.TestCase):
     def test_balance_sheet_identity_not_flagged(self):
         """测试数据勾稽是平的，不应报数据可信度问题。"""
         self.assertNotIn("BS_IDENTITY", self.hit_rules)
+
+
+# ---------------------------------------------------------------- 行业基准层
+
+class TestIndustryBenchmark(unittest.TestCase):
+    """单个指标的同行分布。"""
+
+    def setUp(self):
+        self.b = IndustryBenchmark(
+            industry="工程机械", metric="ar_growth_gap", n_peers=42,
+            percentiles={"p50": 6.0, "p75": 12.0, "p90": 20.0},
+        )
+
+    def test_at_returns_exact_quantile(self):
+        self.assertEqual(self.b.at("p75"), 12.0)
+
+    def test_at_unknown_quantile_returns_none(self):
+        self.assertIsNone(self.b.at("p99"))
+
+    def test_available_quantiles_is_sorted_property(self):
+        self.assertEqual(self.b.available_quantiles, ["p50", "p75", "p90"])
+
+    def test_to_dict_roundtrip(self):
+        back = IndustryBenchmark.from_dict(self.b.to_dict())
+        self.assertEqual(back.at("p90"), 20.0)
+        self.assertEqual(back.n_peers, 42)
+        self.assertEqual(back.industry, "工程机械")
+
+
+class TestBenchmarkBook(unittest.TestCase):
+    """基准簿：查询、样本量门槛、容错加载。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.book = load_benchmarks(BENCH_PATH)
+
+    def test_fixture_loaded(self):
+        self.assertTrue(self.book)
+        self.assertIn("工程机械", self.book.industries())
+
+    def test_get_returns_none_for_unknown_industry(self):
+        self.assertIsNone(self.book.get("航天军工", "ar_growth_gap"))
+
+    def test_get_returns_none_below_min_peers(self):
+        """3 个同行的分位数是噪声，不是基准。"""
+        self.assertIsNone(self.book.get("小众仪器制造", "ar_growth_gap"))
+        self.assertEqual(self.book.get("工程机械", "ar_growth_gap").n_peers, 42)
+
+    def test_line_calibrates_from_industry(self):
+        line, src = self.book.line("工程机械", "ar_growth_gap", 20.0)
+        self.assertEqual(line, 12.0)
+        self.assertEqual(src, "industry:p75")
+
+    def test_line_falls_back_to_absolute(self):
+        line, src = self.book.line("航天军工", "ar_growth_gap", 20.0)
+        self.assertEqual((line, src), (20.0, "absolute"))
+
+    def test_line_falls_back_when_metric_missing(self):
+        line, src = self.book.line("工程机械", "no_such_metric", 20.0)
+        self.assertEqual((line, src), (20.0, "absolute"))
+
+    def test_loader_tolerates_corrupt_entry(self):
+        """单个行业损坏不该让整本簿加载失败——参照数据是增强项。"""
+        import json
+        import tempfile
+
+        bad = {
+            "schema": "finagent-industry-benchmarks/1",
+            "min_peers": 5,
+            "industries": {
+                "坏行业": {"n_peers": 10, "metrics": "这不是字典"},
+                "工程机械": {
+                    "n_peers": 42,
+                    "metrics": {"ar_growth_gap": {"p75": 12.0}},
+                },
+            },
+        }
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", delete=False, encoding="utf-8"
+        ) as fh:
+            json.dump(bad, fh, ensure_ascii=False)
+            tmp = fh.name
+        try:
+            book = load_benchmarks(tmp)
+            self.assertIn("工程机械", book.industries())
+            self.assertNotIn("坏行业", book.industries())
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+
+
+class TestBenchmarkedRules(unittest.TestCase):
+    """规则接行业基准：两个方向都要成立，且不传时逐字不变。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.book = load_benchmarks(BENCH_PATH)
+        cls.cur, cls.prev = load_pair(
+            STMT_DIR / "恒润重工_2025A.json", STMT_DIR / "恒润重工_2024A.json"
+        )
+
+    def _run(self, benchmarks=None):
+        return RuleEngine().run(self.cur, self.prev, benchmarks=benchmarks)
+
+    def test_absolute_lines_produce_nothing_for_this_fixture(self):
+        """恒润重工按全市场口径是干净的——这是它的设计前提。"""
+        self.assertEqual(self._run(), [])
+
+    def test_calibration_raises_sensitivity(self):
+        """同行业口径下，两项进入最差四分之一，应当报出来。"""
+        hits = {f.rule_id for f in self._run(self.book)}
+        self.assertEqual(hits, {"AR_GAP", "DEBT_RATIO"})
+
+    def test_calibrated_findings_are_warn_not_high(self):
+        for f in self._run(self.book):
+            self.assertEqual(f.level, Level.WARN)
+
+    def test_evidence_discloses_line_source(self):
+        """换了阈值必须留痕：读者要能回答"这个 12 是哪来的"。"""
+        for f in self._run(self.book):
+            self.assertEqual(f.evidence.get("line_source"), "industry:p75")
+            self.assertIn("line_warn", f.evidence)
+
+    def test_absolute_findings_record_absolute_source(self):
+        cur, prev = load_pair(
+            STMT_DIR / "示例制造_2025A.json", STMT_DIR / "示例制造_2024A.json"
+        )
+        # 示例制造没有 industry，即便传了基准簿也应走绝对线
+        for f in RuleEngine().run(cur, prev, benchmarks=self.book):
+            self.assertEqual(f.evidence.get("line_source", "absolute"), "absolute")
+
+    def test_calibration_can_suppress_a_finding(self):
+        """反方向：绝对线报警但行业常态更宽松时，不应报。
+
+        建筑施工的应收剪刀差 p75 = 26pct，比全市场观察线 20pct 还松。
+        gap 25pct 在绝对线下触发，在行业线下不触发。
+        """
+        cur = mk(
+            "2025A",
+            accounts_receivable=1250.0, revenue=1000.0,
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        prev = mk(
+            "2024A",
+            accounts_receivable=1000.0, revenue=1000.0,
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        cur.meta["industry"] = "建筑施工"
+        f = rule_receivable_growth_gap(cur, prev, RB)
+        self.assertIsNotNone(f, "绝对线下 gap 25pct 应触发")
+        self.assertEqual(f.evidence["line_source"], "absolute")
+
+        f2 = rule_receivable_growth_gap(cur, prev, RB, benchmarks=self.book)
+        self.assertIsNone(f2, "建筑施工 p75=26pct，gap 25pct 属于行业常态，不该报")
+
+    def test_high_line_scales_with_calibrated_warn(self):
+        """重大线只按比例推导，不跟着行业样本漂移。"""
+        cur = mk(
+            "2025A",
+            accounts_receivable=2000.0, revenue=1000.0,
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        prev = mk(
+            "2024A",
+            accounts_receivable=1000.0, revenue=1000.0,
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        cur.meta["industry"] = "工程机械"
+        f = rule_receivable_growth_gap(cur, prev, RB, benchmarks=self.book)
+        self.assertEqual(f.level, Level.HIGH)
+        # 绝对线 20/40，比例 2；校准后 12 → 24
+        self.assertEqual(f.evidence["line_warn"], 12.0)
+        self.assertEqual(f.evidence["line_high"], 24.0)
+
+
+# ---------------------------------------------------------------- 评分参数层
+
+class TestScorePolicy(unittest.TestCase):
+    """ScorePolicy：敏感性分析必须走真实代码路径。"""
+
+    def _result(self, levels):
+        findings = [Finding(rule_id=f"R{i}", level=lv, title=f"t{i}", detail="d") for i, lv in enumerate(levels)]
+        return AnalysisResult(company="x", period="2025A", findings=findings)
+
+    def test_default_policy_matches_legacy_numbers(self):
+        """不传策略时，分数与改造前逐字一致。"""
+        import math
+
+        r = self._result([Level.HIGH] * 4 + [Level.WARN] * 3)
+        raw = 4 * 10.0 + 3 * 4.0
+        expect = (1 - math.exp(-raw / 20.0)) * 100
+        self.assertAlmostEqual(r.risk_score(), expect, places=9)
+        self.assertEqual(DEFAULT_POLICY.scale, 20.0)
+
+    def test_larger_scale_lowers_score_monotonically(self):
+        r = self._result([Level.HIGH] * 3)
+        small = r.risk_score(ScorePolicy(scale=10.0))
+        mid = r.risk_score(ScorePolicy(scale=20.0))
+        large = r.risk_score(ScorePolicy(scale=50.0))
+        self.assertGreater(small, mid)
+        self.assertGreater(mid, large)
+
+    def test_weights_change_ranking(self):
+        r = self._result([Level.WARN] * 6)
+        # 关注权重拉到 10，分数应逼近 6 项重大的情形
+        highish = r.risk_score(ScorePolicy(w_warn=10.0, w_high=10.0))
+        self.assertGreater(highish, 90.0)
+
+    def test_grade_cutoffs_are_configurable(self):
+        """6 项关注：raw=24，分数 69.88，默认切点下判「高」。"""
+        r = self._result([Level.WARN] * 6)
+        self.assertEqual(r.risk_grade(), "高")
+        strict = r.risk_grade(ScorePolicy(grade_very_high=99.0, grade_high=95.0))
+        self.assertEqual(strict, "中")
+
+    def test_severity_floor_is_configurable(self):
+        """1 项重大：默认地板是高；把地板抬到 2 项后回落到中。"""
+        r = self._result([Level.HIGH])
+        self.assertEqual(r.risk_grade(ScorePolicy(sev_high=1)), "高")
+        self.assertEqual(r.risk_grade(ScorePolicy(sev_high=2)), "中")
+
+    def test_policy_serializes_for_reporting(self):
+        d = DEFAULT_POLICY.to_dict()
+        self.assertEqual(d["scale"], 20.0)
+        self.assertEqual(d["weights"]["high"], 10.0)
+        self.assertEqual(d["severity_counts"]["high"], 1)
+
+
+# ---------------------------------------------------------------- 底稿层
+
+class TestWorkingPaper(unittest.TestCase):
+    """审计底稿：结构完整、结论不被改写、序列化可往返。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cur, prev = load_pair(
+            STMT_DIR / "示例制造_2025A.json", STMT_DIR / "示例制造_2024A.json"
+        )
+        cls.result = Orchestrator().analyze(cur, prev, company="示例制造股份")
+        cls.wp = build_working_paper(
+            cls.result, ref="A-3", prepared_by="张三", reviewed_by="李四"
+        )
+
+    def test_header_fields_complete(self):
+        self.assertEqual(self.wp.ref, "A-3")
+        self.assertEqual(self.wp.entity, "示例制造股份")
+        self.assertEqual(self.wp.period, "2025A")
+        self.assertEqual(self.wp.signoff.prepared_by, "张三")
+        self.assertEqual(self.wp.signoff.reviewed_by, "李四")
+
+    def test_procedures_cover_executed_work(self):
+        codes = [p.code for p in self.wp.procedures]
+        self.assertIn("P1", codes)
+        self.assertIn("P2", codes)
+
+    def test_findings_carried_over_verbatim(self):
+        self.assertEqual(len(self.wp.findings), len(self.result.findings))
+        self.assertEqual(
+            [f.rule_id for f in self.wp.findings],
+            [f.rule_id for f in self.result.findings],
+        )
+
+    def test_cross_references_present(self):
+        refs = self.wp.index_refs()
+        self.assertIn("A-3", refs)
+
+    def test_conclusion_is_derived_not_rewritten(self):
+        """底稿结论由分析结果原样派生，不另做加工。"""
+        c = self.wp.conclusion
+        self.assertIn("示例制造股份", c)
+        self.assertIn("2025A", c)
+        self.assertIn("7 项异常", c)
+        self.assertIn("重大 4 项", c)
+        self.assertIn("92.6", c)
+        self.assertIn("极高", c)
+        # 建议动作也必须与档位一致
+        self.assertIn(self.result.risk_action(), c)
+
+    def test_markdown_has_all_five_sections(self):
+        md = render_workpaper_markdown(self.wp)
+        for h in ("一、", "二、", "三、", "四、", "五、"):
+            self.assertIn(h, md)
+        self.assertIn("编制人", md)
+        self.assertIn("复核人", md)
+
+    def test_markdown_marks_high_severity(self):
+        md = render_workpaper_markdown(self.wp)
+        self.assertIn("重大", md)
+
+    def test_to_dict_roundtrip(self):
+        from finagent.workpaper import WorkingPaper
+
+        back = WorkingPaper.from_dict(self.wp.to_dict())
+        self.assertEqual(back.ref, self.wp.ref)
+        self.assertEqual(len(back.findings), len(self.wp.findings))
+        self.assertEqual(back.signoff.prepared_by, self.wp.signoff.prepared_by)
+
+    def test_xlsx_renders_five_sheets(self):
+        openpyxl = pytest_import("openpyxl")
+        if openpyxl is None:
+            self.skipTest("openpyxl 未安装")
+        import tempfile
+
+        from finagent.workpaper import render_workpaper_xlsx
+
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "wp.xlsx"
+            render_workpaper_xlsx(self.wp, str(out))
+            wb = openpyxl.load_workbook(out)
+            self.assertEqual(
+                wb.sheetnames, ["底稿首页", "审计过程", "审计发现", "交叉索引", "审计结论"]
+            )
+            self.assertEqual(wb["审计发现"].max_row, len(self.wp.findings) + 1)
+
+    def test_trend_note_appears_when_series_given(self):
+        series = build_series(
+            [
+                STMT_DIR / "示例制造_2024A.json",
+                STMT_DIR / "示例制造_2025A.json",
+            ]
+        )
+        wp = build_working_paper(self.result, series=series)
+        p2 = [p for p in wp.procedures if p.code == "P2"][0]
+        self.assertIn("趋势", p2.scope_ + p2.result + p2.method)
+
+    def test_xlsx_requires_openpyxl_explicitly(self):
+        """缺依赖必须明确报错，不能静默降级成 Markdown。
+
+        静默降级的危险在于：调用方要的是表格文件，
+        拿到的却是文本，还以为交付完成了。
+        """
+        import builtins
+
+        from finagent import workpaper as wp_mod
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "openpyxl":
+                raise ImportError("No module named 'openpyxl'")
+            return real_import(name, *args, **kwargs)
+
+        builtins.__import__ = fake_import
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                wp_mod.render_workpaper_xlsx(self.wp, "/tmp/should_not_exist.xlsx")
+        finally:
+            builtins.__import__ = real_import
+        self.assertIn("openpyxl", str(ctx.exception))
+        self.assertIn("render_workpaper_markdown", str(ctx.exception))
+
+
+# ---------------------------------------------------------------- A/B 指标层
+
+class TestAbMetrics(unittest.TestCase):
+    """A/B 对比的四类指标：保真、覆盖、复述、可复算。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cur, prev = load_pair(
+            STMT_DIR / "示例制造_2025A.json", STMT_DIR / "示例制造_2024A.json"
+        )
+        cls.findings = Orchestrator().analyze(cur, prev).findings
+
+    def test_extract_numbers_handles_cjk_and_signs(self):
+        vals = extract_numbers("剪刀差 56.3pct，下降 -2.1 个百分点，共 7 项")
+        self.assertIn(56.3, vals)
+        self.assertIn(-2.1, vals)
+        self.assertIn(7.0, vals)
+
+    def test_number_pool_includes_evidence_and_counts(self):
+        pool = number_pool(self.findings, n_high=4, n_warn=3)
+        # 计数类数字必须合法，否则所有"重大 4 项"都会被判成幻觉
+        self.assertIn(4.0, pool)
+        self.assertIn(7.0, pool)
+        # evidence 里的数字同样合法
+        self.assertIn(64.3, pool)  # 应收同比
+
+    def test_fidelity_accepts_grounded_text(self):
+        text = "应收账款同比 64.3%，剪刀差 56.3 个百分点，共 7 项异常，重大 4 项。"
+        rep = check_fidelity(text, self.findings, n_high=4, n_warn=3)
+        self.assertEqual(rep.score, 1.0)
+        self.assertEqual(rep.ungrounded, [])
+
+    def test_fidelity_flags_fabricated_number(self):
+        text = "整体风险敞口约为 87.4%，需引起高度重视。"
+        rep = check_fidelity(text, self.findings, n_high=4, n_warn=3)
+        self.assertLess(rep.score, 1.0)
+        self.assertIn(87.4, rep.ungrounded)
+
+    def test_coverage_counts_covered_titles(self):
+        full = "\n".join(f.title for f in self.findings)
+        rep = check_coverage(full, self.findings)
+        self.assertEqual(rep.score, 1.0)
+        self.assertEqual(check_coverage("完全无关的一段话", self.findings).score, 0.0)
+
+    def test_restatement_detects_verbatim_copy(self):
+        copy = "\n".join(f.detail for f in self.findings)
+        self.assertGreater(check_restatement(copy, self.findings), 0.9)
+
+    def test_restatement_near_zero_for_aggregation(self):
+        agg = "本期异常集中在收入质量与现金流两个方向，建议按顺序核查原始凭证。"
+        self.assertLess(check_restatement(agg, self.findings), 0.1)
+
+    def test_determinism_ratio(self):
+        """取最常见输出的占比，不是"是否与首次相同"。"""
+        self.assertEqual(determinism_ratio(["a", "a", "a"]), 1.0)
+        self.assertEqual(determinism_ratio(["a", "b"]), 0.5)
+        self.assertEqual(determinism_ratio(["a", "a", "b"]), 2 / 3)
+        self.assertEqual(determinism_ratio([]), 1.0)
+
+    def test_evaluate_produces_comparable_row(self):
+        """用真实模板研判器跑一遍，四个指标都应落在合法区间。"""
+        agent = ReportAgent(llm=NullLLM())
+        out = agent.reason("示例制造股份", "2025A", self.findings)
+        self.assertTrue(out, "模板研判不应为空")
+        row = evaluate("场景", "确定性模板", [out], self.findings)
+        self.assertEqual(row.n_runs, 1)
+        self.assertTrue(0.0 <= row.fidelity.score <= 1.0)
+        self.assertTrue(0.0 <= row.coverage.score <= 1.0)
+        self.assertTrue(0.0 <= row.restatement <= 1.0)
+        self.assertGreater(row.length, 0)
+
+    def test_template_reasoner_is_fully_grounded(self):
+        """确定性模板的每个数字都必须来自 findings——这是它的立身之本。"""
+        agent = ReportAgent(llm=NullLLM())
+        out = agent.reason("示例制造股份", "2025A", self.findings)
+        rep = check_fidelity(out, self.findings, n_high=4, n_warn=3)
+        self.assertEqual(rep.score, 1.0, f"模板出现无依据数字：{rep.ungrounded}")
+
+
+def pytest_import(name: str):
+    """缺依赖时返回 None，让测试跳过而非报错。"""
+    try:
+        return __import__(name)
+    except ImportError:
+        return None
 
 
 if __name__ == "__main__":

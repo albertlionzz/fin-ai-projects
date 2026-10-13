@@ -1,0 +1,1203 @@
+{
+  "grid": {
+    "scales": [
+      10.0,
+      15.0,
+      20.0,
+      25.0,
+      30.0,
+      40.0,
+      50.0
+    ],
+    "weight_ratios": [
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      5.0
+    ],
+    "default_policy": {
+      "scale": 20.0,
+      "weights": {
+        "high": 10.0,
+        "warn": 4.0,
+        "info": 1.0
+      },
+      "grade_cutoffs": {
+        "very_high": 85.0,
+        "high": 65.0,
+        "mid": 35.0
+      },
+      "severity_counts": {
+        "very_high": 4,
+        "high": 1
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "name": "示例制造 2025A（7 类异常全命中）",
+      "note": "极端情形：重大 4 项。用于检验高分段是否稳定——若这类场景都会因参数翻档，说明评分函数在最需要区分的区间失效。",
+      "baseline_grade": "极高",
+      "baseline_score": 92.57,
+      "n_findings": 7,
+      "n_high": 4,
+      "n_warn": 3,
+      "n_cells": 35,
+      "n_flip": 0,
+      "stability": 1.0,
+      "cells": [
+        {
+          "scale": 10.0,
+          "ratio": 1.5,
+          "score": 97.27,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 1.5,
+          "score": 90.93,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 1.5,
+          "score": 83.47,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 1.5,
+          "score": 76.31,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 1.5,
+          "score": 69.88,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 1.5,
+          "score": 59.34,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 1.5,
+          "score": 51.32,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.0,
+          "score": 98.77,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.0,
+          "score": 94.68,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.0,
+          "score": 88.92,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.0,
+          "score": 82.8,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.0,
+          "score": 76.93,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.0,
+          "score": 66.71,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.0,
+          "score": 58.52,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.5,
+          "score": 99.45,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.5,
+          "score": 96.88,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.5,
+          "score": 92.57,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.5,
+          "score": 87.51,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.5,
+          "score": 82.33,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.5,
+          "score": 72.75,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.5,
+          "score": 64.65,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 3.0,
+          "score": 99.75,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 3.0,
+          "score": 98.17,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 3.0,
+          "score": 95.02,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 3.0,
+          "score": 90.93,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 3.0,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 3.0,
+          "score": 77.69,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 3.0,
+          "score": 69.88,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 5.0,
+          "score": 99.99,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 5.0,
+          "score": 99.78,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 5.0,
+          "score": 98.99,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 5.0,
+          "score": 97.48,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 5.0,
+          "score": 95.34,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 5.0,
+          "score": 89.97,
+          "grade": "极高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 5.0,
+          "score": 84.12,
+          "grade": "极高",
+          "flipped": false
+        }
+      ]
+    },
+    {
+      "name": "长恒电子 2025A（4 期慢性恶化）",
+      "note": "中等情形：重大 2 项、关注 0 项。这是饱和函数得分天然偏低的区间（重大项少），最可能因 scale 变化而翻档。",
+      "baseline_grade": "高",
+      "baseline_score": 63.21,
+      "n_findings": 2,
+      "n_high": 2,
+      "n_warn": 0,
+      "n_cells": 35,
+      "n_flip": 5,
+      "stability": 0.8571,
+      "cells": [
+        {
+          "scale": 10.0,
+          "ratio": 1.5,
+          "score": 69.88,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 1.5,
+          "score": 55.07,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 1.5,
+          "score": 45.12,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 1.5,
+          "score": 38.12,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 1.5,
+          "score": 32.97,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 1.5,
+          "score": 25.92,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 1.5,
+          "score": 21.34,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.0,
+          "score": 79.81,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.0,
+          "score": 65.58,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.0,
+          "score": 55.07,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.0,
+          "score": 47.27,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.0,
+          "score": 41.34,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.0,
+          "score": 32.97,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.0,
+          "score": 27.39,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.5,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.5,
+          "score": 73.64,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.5,
+          "score": 63.21,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.5,
+          "score": 55.07,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.5,
+          "score": 48.66,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.5,
+          "score": 39.35,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.5,
+          "score": 32.97,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 3.0,
+          "score": 90.93,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 3.0,
+          "score": 79.81,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 3.0,
+          "score": 69.88,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 3.0,
+          "score": 61.71,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 3.0,
+          "score": 55.07,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 3.0,
+          "score": 45.12,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 3.0,
+          "score": 38.12,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 5.0,
+          "score": 98.17,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 5.0,
+          "score": 93.05,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 20.0,
+          "ratio": 5.0,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 25.0,
+          "ratio": 5.0,
+          "score": 79.81,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 5.0,
+          "score": 73.64,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 5.0,
+          "score": 63.21,
+          "grade": "高",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 5.0,
+          "score": 55.07,
+          "grade": "高",
+          "flipped": false
+        }
+      ]
+    },
+    {
+      "name": "恒润重工 2025A（行业校准后 2 项关注）",
+      "note": "轻微情形：0 项重大、2 项关注。无重大异常时档位完全由分数决定，是检验分数档切点的纯净样本。",
+      "baseline_grade": "中",
+      "baseline_score": 32.97,
+      "n_findings": 2,
+      "n_high": 0,
+      "n_warn": 2,
+      "n_cells": 35,
+      "n_flip": 0,
+      "stability": 1.0,
+      "cells": [
+        {
+          "scale": 10.0,
+          "ratio": 1.5,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 1.5,
+          "score": 41.34,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 1.5,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 1.5,
+          "score": 27.39,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 1.5,
+          "score": 23.41,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 1.5,
+          "score": 18.13,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 1.5,
+          "score": 14.79,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.0,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.0,
+          "score": 41.34,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.0,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.0,
+          "score": 27.39,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.0,
+          "score": 23.41,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.0,
+          "score": 18.13,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.0,
+          "score": 14.79,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.5,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.5,
+          "score": 41.34,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.5,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.5,
+          "score": 27.39,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.5,
+          "score": 23.41,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.5,
+          "score": 18.13,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.5,
+          "score": 14.79,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 3.0,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 3.0,
+          "score": 41.34,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 3.0,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 3.0,
+          "score": 27.39,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 3.0,
+          "score": 23.41,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 3.0,
+          "score": 18.13,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 3.0,
+          "score": 14.79,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 5.0,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 15.0,
+          "ratio": 5.0,
+          "score": 41.34,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 20.0,
+          "ratio": 5.0,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 5.0,
+          "score": 27.39,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 5.0,
+          "score": 23.41,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 5.0,
+          "score": 18.13,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 5.0,
+          "score": 14.79,
+          "grade": "中",
+          "flipped": false
+        }
+      ]
+    },
+    {
+      "name": "合成边界（5 项关注，贴 65 分切点）",
+      "note": "合成探针，非真实公司。用于隔离分数维度的影响——真实场景的档位多由严重度维度决定，测不出切点敏感性。",
+      "baseline_grade": "中",
+      "baseline_score": 63.21,
+      "n_findings": 5,
+      "n_high": 0,
+      "n_warn": 5,
+      "n_cells": 35,
+      "n_flip": 10,
+      "stability": 0.7143,
+      "cells": [
+        {
+          "scale": 10.0,
+          "ratio": 1.5,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 1.5,
+          "score": 73.64,
+          "grade": "高",
+          "flipped": true
+        },
+        {
+          "scale": 20.0,
+          "ratio": 1.5,
+          "score": 63.21,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 1.5,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 1.5,
+          "score": 48.66,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 1.5,
+          "score": 39.35,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 1.5,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.0,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.0,
+          "score": 73.64,
+          "grade": "高",
+          "flipped": true
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.0,
+          "score": 63.21,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.0,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.0,
+          "score": 48.66,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.0,
+          "score": 39.35,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.0,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 2.5,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 2.5,
+          "score": 73.64,
+          "grade": "高",
+          "flipped": true
+        },
+        {
+          "scale": 20.0,
+          "ratio": 2.5,
+          "score": 63.21,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 2.5,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 2.5,
+          "score": 48.66,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 2.5,
+          "score": 39.35,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 2.5,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 3.0,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 3.0,
+          "score": 73.64,
+          "grade": "高",
+          "flipped": true
+        },
+        {
+          "scale": 20.0,
+          "ratio": 3.0,
+          "score": 63.21,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 3.0,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 3.0,
+          "score": 48.66,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 3.0,
+          "score": 39.35,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 3.0,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 10.0,
+          "ratio": 5.0,
+          "score": 86.47,
+          "grade": "极高",
+          "flipped": true
+        },
+        {
+          "scale": 15.0,
+          "ratio": 5.0,
+          "score": 73.64,
+          "grade": "高",
+          "flipped": true
+        },
+        {
+          "scale": 20.0,
+          "ratio": 5.0,
+          "score": 63.21,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 25.0,
+          "ratio": 5.0,
+          "score": 55.07,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 30.0,
+          "ratio": 5.0,
+          "score": 48.66,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 40.0,
+          "ratio": 5.0,
+          "score": 39.35,
+          "grade": "中",
+          "flipped": false
+        },
+        {
+          "scale": 50.0,
+          "ratio": 5.0,
+          "score": 32.97,
+          "grade": "中",
+          "flipped": false
+        }
+      ]
+    }
+  ],
+  "stable_region": {
+    "n_scenarios": 4,
+    "n_cells": 35,
+    "n_stable": 24,
+    "share": 0.6857,
+    "stable_cells": [
+      {
+        "scale": 20.0,
+        "ratio": 1.5,
+        "is_default": false
+      },
+      {
+        "scale": 20.0,
+        "ratio": 2.0,
+        "is_default": false
+      },
+      {
+        "scale": 20.0,
+        "ratio": 2.5,
+        "is_default": true
+      },
+      {
+        "scale": 20.0,
+        "ratio": 3.0,
+        "is_default": false
+      },
+      {
+        "scale": 25.0,
+        "ratio": 1.5,
+        "is_default": false
+      },
+      {
+        "scale": 25.0,
+        "ratio": 2.0,
+        "is_default": false
+      },
+      {
+        "scale": 25.0,
+        "ratio": 2.5,
+        "is_default": false
+      },
+      {
+        "scale": 25.0,
+        "ratio": 3.0,
+        "is_default": false
+      },
+      {
+        "scale": 25.0,
+        "ratio": 5.0,
+        "is_default": false
+      },
+      {
+        "scale": 30.0,
+        "ratio": 1.5,
+        "is_default": false
+      },
+      {
+        "scale": 30.0,
+        "ratio": 2.0,
+        "is_default": false
+      },
+      {
+        "scale": 30.0,
+        "ratio": 2.5,
+        "is_default": false
+      },
+      {
+        "scale": 30.0,
+        "ratio": 3.0,
+        "is_default": false
+      },
+      {
+        "scale": 30.0,
+        "ratio": 5.0,
+        "is_default": false
+      },
+      {
+        "scale": 40.0,
+        "ratio": 1.5,
+        "is_default": false
+      },
+      {
+        "scale": 40.0,
+        "ratio": 2.0,
+        "is_default": false
+      },
+      {
+        "scale": 40.0,
+        "ratio": 2.5,
+        "is_default": false
+      },
+      {
+        "scale": 40.0,
+        "ratio": 3.0,
+        "is_default": false
+      },
+      {
+        "scale": 40.0,
+        "ratio": 5.0,
+        "is_default": false
+      },
+      {
+        "scale": 50.0,
+        "ratio": 1.5,
+        "is_default": false
+      },
+      {
+        "scale": 50.0,
+        "ratio": 2.0,
+        "is_default": false
+      },
+      {
+        "scale": 50.0,
+        "ratio": 2.5,
+        "is_default": false
+      },
+      {
+        "scale": 50.0,
+        "ratio": 3.0,
+        "is_default": false
+      },
+      {
+        "scale": 50.0,
+        "ratio": 5.0,
+        "is_default": false
+      }
+    ]
+  }
+}

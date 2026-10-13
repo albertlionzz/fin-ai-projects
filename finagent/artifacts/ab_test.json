@@ -1,0 +1,167 @@
+{
+  "mode": "stub",
+  "stub_mode": "good",
+  "runs": 3,
+  "rows": [
+    {
+      "scenario": "示例制造 2025A（重大 4 / 关注 3）",
+      "reasoner": "模板（NullLLM）",
+      "fidelity": {
+        "total_numbers": 4,
+        "grounded": 4,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 7,
+        "covered": 7,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 0.0,
+      "length": 712,
+      "determinism": 1.0,
+      "n_runs": 3
+    },
+    {
+      "scenario": "长恒电子 2025A（4 期趋势，重大 2）",
+      "reasoner": "模板（NullLLM）",
+      "fidelity": {
+        "total_numbers": 5,
+        "grounded": 5,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 2,
+        "covered": 2,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 0.0,
+      "length": 482,
+      "determinism": 1.0,
+      "n_runs": 3
+    },
+    {
+      "scenario": "恒润重工 2025A（行业校准，关注 2）",
+      "reasoner": "模板（NullLLM）",
+      "fidelity": {
+        "total_numbers": 2,
+        "grounded": 2,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 2,
+        "covered": 2,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 0.0,
+      "length": 307,
+      "determinism": 1.0,
+      "n_runs": 3
+    },
+    {
+      "scenario": "空白场景（0 项发现）",
+      "reasoner": "模板（NullLLM）",
+      "fidelity": {
+        "total_numbers": 0,
+        "grounded": 0,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 0,
+        "covered": 0,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 0.0,
+      "length": 36,
+      "determinism": 1.0,
+      "n_runs": 3
+    },
+    {
+      "scenario": "示例制造 2025A（重大 4 / 关注 3）",
+      "reasoner": "STUB-good（框架自检）",
+      "fidelity": {
+        "total_numbers": 26,
+        "grounded": 26,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 7,
+        "covered": 7,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 1.0,
+      "length": 934,
+      "determinism": 1.0,
+      "n_runs": 3
+    },
+    {
+      "scenario": "长恒电子 2025A（4 期趋势，重大 2）",
+      "reasoner": "STUB-good（框架自检）",
+      "fidelity": {
+        "total_numbers": 10,
+        "grounded": 10,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 2,
+        "covered": 2,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 1.0,
+      "length": 341,
+      "determinism": 1.0,
+      "n_runs": 3
+    },
+    {
+      "scenario": "恒润重工 2025A（行业校准，关注 2）",
+      "reasoner": "STUB-good（框架自检）",
+      "fidelity": {
+        "total_numbers": 9,
+        "grounded": 9,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 2,
+        "covered": 2,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 1.0,
+      "length": 291,
+      "determinism": 1.0,
+      "n_runs": 3
+    },
+    {
+      "scenario": "空白场景（0 项发现）",
+      "reasoner": "STUB-good（框架自检）",
+      "fidelity": {
+        "total_numbers": 0,
+        "grounded": 0,
+        "ungrounded": [],
+        "score": 1.0
+      },
+      "coverage": {
+        "total": 0,
+        "covered": 0,
+        "missing": [],
+        "score": 1.0
+      },
+      "restatement": 0.0,
+      "length": 33,
+      "determinism": 1.0,
+      "n_runs": 3
+    }
+  ]
+}

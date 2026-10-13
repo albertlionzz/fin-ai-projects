@@ -1,0 +1,29 @@
+{
+  "period": "2024A",
+  "meta": {
+    "company": "恒润重工",
+    "unit": "万元",
+    "industry": "工程机械",
+    "source": "模拟数据，用于演示行业基准校准",
+    "note": "对照期。全市场口径下各项指标均在观察线内。"
+  },
+  "items": {
+    "revenue": 50000.0,
+    "cost_of_sales": 40000.0,
+    "net_profit": 3300.0,
+    "accounts_receivable": 20000.0,
+    "inventory": 11000.0,
+    "total_assets": 120000.0,
+    "total_liabilities": 74400.0,
+    "total_equity": 45600.0,
+    "net_assets": 45600.0,
+    "current_assets": 70000.0,
+    "current_liabilities": 45000.0,
+    "operating_cash_flow": 4000.0,
+    "goodwill": 0.0,
+    "selling_expense": 3200.0,
+    "admin_expense": 2600.0,
+    "rd_expense": 1800.0,
+    "finance_expense": 1200.0
+  }
+}

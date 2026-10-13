@@ -289,11 +289,22 @@ class AuditAgent(Agent):
 
     刻意**不接 LLM**。原因：异常判定必须可复算、可辩护。
     同一个输入必须永远得到同一个结论，否则审计无法追责。
+
+    行业基准同样在这一环生效，且同样不经过 LLM——校准只是换了观察线的
+    取值来源，判定逻辑一条没变。基准簿由调用方（编排层 / CLI）注入，
+    Agent 本身不负责加载数据。
     """
 
-    def __init__(self, engine: RuleEngine | None = None, name: str = "audit"):
+    def __init__(
+        self,
+        engine: RuleEngine | None = None,
+        name: str = "audit",
+        benchmarks=None,
+    ):
         super().__init__(name=name)
         self.engine = engine or RuleEngine()
+        if benchmarks is not None and self.engine.benchmarks is None:
+            self.engine.benchmarks = benchmarks
 
     def run(
         self,
@@ -305,6 +316,10 @@ class AuditAgent(Agent):
         findings = self.engine.run(cur, prev, series=series)
         high = sum(1 for f in findings if f.level == Level.HIGH)
         warn = sum(1 for f in findings if f.level == Level.WARN)
+        calibrated = sum(
+            1 for f in findings
+            if f.evidence.get("line_source", "absolute") != "absolute"
+        )
         if series is not None and series.has_trend(self.engine.book.trend_min_periods):
             detail = (
                 f"{len(self.engine.rules)} 条规则（含多期趋势）→ {len(findings)} 项发现"
@@ -315,6 +330,8 @@ class AuditAgent(Agent):
                 f"{len(self.engine.rules)} 条规则 → {len(findings)} 项发现"
                 f"（重大 {high} / 关注 {warn}）"
             )
+        if calibrated:
+            detail += f"，其中 {calibrated} 项观察线经行业分位校准"
         self._log("rule_engine", detail, ms=(time.time() - t0) * 1000)
         return findings
 
@@ -510,9 +527,14 @@ class Orchestrator:
         company: str | None = None,
         period: str | None = None,
         series: StatementSeries | None = None,
+        benchmarks=None,
     ) -> AnalysisResult:
         company = company or str(cur.meta.get("company") or "未命名主体")
         period = period or cur.period
+
+        if benchmarks is not None:
+            if self.audit.engine.benchmarks is None:
+                self.audit.engine.benchmarks = benchmarks
 
         # 环节 2：合规校验（环节 1 的数据提取已完成，输入即结构化报表）
         # 传入 series 时启用多期趋势规则；不传则退化为纯两期分析，行为不变。
@@ -533,6 +555,20 @@ class Orchestrator:
                 "periods": series.periods,
                 "n_periods": len(series),
                 "trend_enabled": series.has_trend(3),
+            }
+        # 行业校准的覆盖情况。记录"哪些发现用了校准线"而非只记一个布尔值——
+        # 复核人要能逐条核对阈值来源，这正是"阈值必须可披露"的落地。
+        bm = self.audit.engine.benchmarks
+        if bm is not None:
+            metrics["benchmarks"] = {
+                "industry": cur.meta.get("industry"),
+                "source": bm.source,
+                "as_of": bm.as_of,
+                "n_entries": len(bm),
+                "calibrated_findings": sorted(
+                    f.rule_id for f in findings
+                    if f.evidence.get("line_source", "absolute") != "absolute"
+                ),
             }
 
         return AnalysisResult(

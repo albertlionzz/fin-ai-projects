@@ -44,16 +44,38 @@ python scripts/run.py analyze \
               data/statements/长恒电子_2025A.json \
     --md   artifacts/report_长恒电子_2025A.md
 
-# 3. 查看已注册的规则与阈值
+# 3. 行业校准观察线（AR_GAP / INV_GAP / GM_SWING / DEBT_RATIO 改按同行业 p75 分位）
+#    报表 meta.industry 缺失或行业不在表里时自动回退绝对线，来源记入 evidence.line_source
+python scripts/run.py analyze \
+    --cur  data/statements/恒润重工_2025A.json \
+    --prev data/statements/恒润重工_2024A.json \
+    --benchmarks data/benchmarks/industry_benchmarks.json \
+    --md   artifacts/report_恒润重工_2025A.md
+
+# 4. 导出审计工作底稿（Markdown 永远可用；xlsx 需 openpyxl）
+python scripts/run.py workpaper --ref A-3 \
+    --cur  data/statements/示例制造_2025A.json \
+    --prev data/statements/示例制造_2024A.json \
+    --md   artifacts/wp_A-3.md \
+    --xlsx artifacts/wp_A-3.xlsx
+
+# 5. 风险分参数敏感性分析（scale × 权重比网格，衡量档位是否翻转）
+python scripts/sensitivity.py --md artifacts/sensitivity.md
+
+# 6. 研判质量 A/B 对比（--stub 为框架自检；--api 走真实 OpenAI 兼容端点）
+python scripts/ab_test.py --stub good --md artifacts/ab_test.md
+python scripts/ab_test.py --api --model qwen-plus --md artifacts/ab_test_api.md
+
+# 7. 查看已注册的规则与阈值
 python scripts/run.py rules
 
-# 4. 从文本报表抽取结构化科目（确定性解析，无 LLM 也可用）
-python scripts/run.py extract --text data/raw/某公司2025年报摘录.txt --period 2025A
+# 8. 从文本报表抽取结构化科目（确定性解析，无 LLM 也可用）
+python scripts/run.py extract --text data/raw/示例公司2025年报摘录.txt --period 2025A
 
-# 5. 批量分析一个目录（按 <主体>_<YYYYA>.json 自动配对相邻两期）
+# 9. 批量分析一个目录（按 <主体>_<YYYYA>.json 自动配对相邻两期）
 python scripts/run.py batch --dir data/statements --md-dir artifacts/batch
 
-# 6. 单元测试
+# 10. 单元测试
 python -m unittest discover -s tests
 ```
 
@@ -68,6 +90,7 @@ python -m unittest discover -s tests
    ├─ AuditAgent            异常判定（★ 刻意不接 LLM）
    │      └─ RuleEngine.run()   10 条规则 → Finding[]
    │             ├─ 单条规则失败不中断整轮，记 ERR_<name> 后继续
+   │             ├─ 传入 benchmarks 时按行业分位校准 4 条规则的观察线
    │             └─ 传入 series 时额外执行：
    │                  ├─ 序列规则（QUALITY_DRIFT 等多期同向恶化）
    │                  └─ 持续性升级（跨期反复命中的发现提升一级严重度）
@@ -78,9 +101,10 @@ python -m unittest discover -s tests
    │
    └─ Orchestrator          串成链路，任何一环失败不中断，trace 如实呈现
           │
-      render.py
-          ├─ render_console()    终端摘要（含趋势区间）
-          └─ render_markdown()   五章节完整报告（多期时横向铺开全部期间）
+      render.py              终端摘要 / Markdown 报告
+      workpaper.py           审计底稿（Markdown + xlsx，五张表）
+      benchmarks.py          行业基准簿（分位数查询 + 样本量门槛）
+      abcompare.py           研判质量四维指标（保真 / 覆盖 / 复述 / 可复算）
 ```
 
 ### 为什么判定环节刻意不用 LLM
@@ -110,6 +134,11 @@ LLM 做不到这一点。所以分工是：
 | `SWING_SCAN` | 科目同比大幅波动扫描 | 50% / 100% | 全面覆盖，防专项规则遗漏 |
 | `QUALITY_DRIFT` | 多项盈利质量指标连续同向恶化 | 5 项指标中 ≥3 项连续同向 | 单期够不上观察线、多期同向走是慢性恶化 |
 
+其中 `AR_GAP` / `INV_GAP` / `GROSS_MARGIN` / `DEBT_RATIO` 四条**支持行业校准**：
+传入基准簿后，观察线取该行业的 p75 分位而非全市场固定值（重大线只按原有比例推导，
+不跟着行业样本漂移）。校准结果一律写进 `Finding.evidence.line_source`——
+财务工具不能悄悄换阈值。
+
 前 9 条是**两期规则**（接收 `cur, prev`）；`QUALITY_DRIFT` 是**序列规则**（接收整个 `series`），
 只有传入 ≥3 期报表时才会执行。序列规则与两期规则通过 `is_series_rule` 标记区分，
 `RuleEngine.run()` 据此分派，互不干扰。
@@ -134,7 +163,9 @@ LLM 做不到这一点。所以分工是：
 🟡 MARGIN_EROSION  净利率 8.20% → 5.83%
 ```
 
-88 个单元测试全部通过。测试分九层：模型层、序列层、规则层、引擎层、抽取层、编排层、渲染层、研判质量、端到端评测集。
+132 个单元测试全部通过（含 1 条需 openpyxl 的底稿渲染测试，缺依赖时自动跳过）。
+测试分十一层：模型层、序列层、规则层、引擎层、行业基准层、评分参数层、底稿层、
+A/B 指标层、抽取层、编排层、渲染层、研判质量、端到端评测集。
 
 ### 多期模式实测（长恒电子，4 期，慢性恶化型）
 
@@ -220,6 +251,49 @@ LLM 做不到这一点。所以分工是：
 
 测试 `test_grade_never_contradicts_severity` 钉住了这个约束：
 `by_score` 与 `by_severity` 取较高者，档位永远不会低于严重度所要求的水平。
+
+### 行业校准实测（恒润重工，同一份数据两种口径）
+
+`data/statements/恒润重工_2025A.json` 是第三套 fixture，`meta.industry = 工程机械`，
+刻意设计成**全市场口径零异常、同行业口径两项进最差四分之一**：
+
+| 指标 | 实测值 | 绝对线 | 工程机械 p75 |
+|---|---|---|---|
+| 应收剪刀差 | 15.0pct | 20（不触发） | **12（触发）** |
+| 资产负债率 | 62.0% | 70（不触发） | **60（触发）** |
+
+不传基准簿时输出"未触发任何异常规则"；传入后输出 2 项关注，
+detail 里明确写出 `已按工程机械行业 p75 分位校准`，
+`evidence.line_source` 记录机器可读的 `industry:p75`。
+
+反向也同样成立——测试 `test_calibration_can_suppress_a_finding` 构造了一个
+建筑施工公司（该行业剪刀差 p75 = 26pct，比全市场线还松），
+绝对线下 gap 25pct 会报警，行业线下不报。**校准是双向的，
+不是只用来提高灵敏度。**
+
+### 参数敏感性实测（35 个组合，69% 稳健）
+
+`scripts/sensitivity.py` 对 scale 与权重比跑网格，衡量指标是**档位是否翻转**，
+不是分数变化——分数是连续量，改任何参数它都会变；
+真正决定行动的是档位（极高=暂缓出具结论、高=专项函证、中=书面问询、低=常规复核）。
+
+结果（`artifacts/sensitivity.md`）：
+
+| 场景 | 基准档位 | 翻档格数 | 稳定性 |
+|---|---|---|---|
+| 示例制造（重大 4 / 关注 3） | 极高 | 0/35 | 100% |
+| 长恒电子（重大 2 / 关注 0） | 高 | 5/35 | 86% |
+| 恒润重工（关注 2，行业校准） | 中 | 0/35 | 100% |
+| 合成边界（5 项关注贴 65 切点） | 中 | 10/35 | 71% |
+
+全局 24/35 个组合在全部场景下不翻档，**默认参数（scale=20、比值 2.5）位于稳健区间内**。
+合成边界那一行是最有信息量的：它在 scale ≤15 时全部翻档，说明
+"分数恰好落在切点附近"的结论本就该被视为不稳健——
+这正是不做敏感性分析就永远发现不了的事。
+
+顺带一个诚实的注脚：无重大异常的场景里，`w_high/w_warn` 比值根本不进入计算
+（风险分只由关注项贡献），矩阵整行同值是数学必然，不是稳定性证据。
+报告里对这类场景单独标注了这一点，避免把"没测到"读成"很稳健"。
 
 ## 关键设计决策
 
@@ -313,17 +387,26 @@ f.confidence = min(1.0, f.confidence + 0.1)
 ```
 finagent/
 ├── src/finagent/
-│   ├── models.py       FinancialStatement / StatementSeries / Finding / AnalysisResult / 风险分与等级
-│   ├── rules.py        RuleBook（全部阈值）+ 10 条规则 + RuleEngine + 持续性升级
+│   ├── models.py       FinancialStatement / StatementSeries / Finding / AnalysisResult / 风险分与等级 / ScorePolicy
+│   ├── rules.py        RuleBook（全部阈值）+ 10 条规则 + RuleEngine + 持续性升级 + 行业校准
+│   ├── benchmarks.py   IndustryBenchmark / BenchmarkBook / load_benchmarks（分位数查询 + 样本量门槛）
+│   ├── workpaper.py    WorkingPaper / Procedure / CrossReference / Signoff + md/xlsx 渲染
+│   ├── abcompare.py    研判质量四维指标（保真 / 覆盖 / 复述 / 可复算）
 │   ├── agents.py       LLM Protocol / ExtractAgent / AuditAgent / ReportAgent / Orchestrator
 │   ├── render.py       console + markdown 两种渲染（多期时横向铺开全部期间）
 │   └── __init__.py
-├── scripts/run.py      CLI：analyze / extract / rules / batch
-├── tests/test_analysis.py  88 个单元测试
-├── data/statements/
-│   ├── 示例制造_2024A/2025A.json    两期 fixture（7 类异常，gold 集断言用）
-│   └── 长恒电子_2022A..2025A.json   四期 fixture（慢性恶化，趋势规则用）
-└── artifacts/          生成的报告与 JSON 结果
+├── scripts/
+│   ├── run.py          CLI：analyze / workpaper / extract / rules / batch
+│   ├── sensitivity.py  风险分参数敏感性分析（scale × 权重比网格）
+│   └── ab_test.py      研判质量 A/B 对比（--stub 框架自检 / --api 真实模型）
+├── tests/test_analysis.py  132 个单元测试
+├── data/
+│   ├── statements/
+│   │   ├── 示例制造_2024A/2025A.json      两期 fixture（7 类异常，gold 集断言用）
+│   │   ├── 长恒电子_2022A..2025A.json     四期 fixture（慢性恶化，趋势规则用）
+│   │   └── 恒润重工_2024A/2025A.json      两期 fixture（行业校准，meta.industry=工程机械）
+│   └── benchmarks/industry_benchmarks.json  5 个行业 × 4 项指标的分位数
+└── artifacts/          生成的报告、底稿、敏感性与 A/B 结果
 ```
 
 ## 已知局限（诚实清单）
@@ -332,7 +415,9 @@ finagent/
 2. **单位靠行末文本判断**：若报表在表头统一标注"单位：万元"而每行不带单位，
    当前会按"无单位即万元"处理——恰好对，但这属于巧合而非设计。需要在解析前显式传入表头单位。
 3. **规则阈值未经历史回测**：观察线来自会计常识，不是从样本里拟合出来的。上线前必须校准。
-4. **风险分权重是手工设定**：重大 10 / 关注 4 / 提示 1 的比值没有数据支撑，应做敏感性分析。
+4. **风险分权重是手工设定**：重大 10 / 关注 4 / 提示 1 的比值没有数据支撑。
+   已做敏感性分析（`scripts/sensitivity.py`）：35 个组合里 24 个不翻档，
+   默认参数在稳健区间内。但这只覆盖了已构造的 4 个场景，不等于全市场稳健。
 5. **持续性判定只覆盖最近 2 个相邻配对**：`trend_min_periods = 3` 派生出
    `n_pairs = 2`，即"最近两期都命中才算持续"，对应的是**连续两年**（两次同比）的持续性。
    原始需求里"连续三年应收增速超营收"这种更严的场景需要把 `trend_min_periods` 调到 4。
@@ -343,18 +428,32 @@ finagent/
    但确实存在。
 7. **QUALITY_DRIFT 的 5 项指标权重相同**：毛利率连续走坏和流动比率连续走坏被同等看待。
    真实场景里前者的信息量显然更大，需要按指标重要性加权。
-8. **未接真实 LLM 验证**：`OpenAICompatLLM` 已实现但未用真实模型跑过，生成质量未知。
-9. **无行业基准**：应收/存货增速是否异常应与行业均值比较，当前只做自身同比。
+8. **未接真实 LLM 验证**：`OpenAICompatLLM` 与 A/B 框架已就绪，但尚未用真实模型跑过。
+   跑法：`python scripts/ab_test.py --api --model qwen-plus`
+   （通义 / DeepSeek / 硅基流动 / vLLM 任一 OpenAI 兼容端点，参数走 `FINAGENT_LLM_API` 与 `FINAGENT_LLM_KEY`）。
+   在此之前，所有 `--stub` 输出只证明框架能跑，不构成模型质量结论。
+9. **行业基准是模拟数据**：`data/benchmarks/industry_benchmarks.json` 的 5 个行业 × 4 项指标
+   是为了演示校准机制而构造的，不是从真实同行样本算出来的。接入前必须换成真实数据源，
+   并补上样本口径（是否含 ST / 是否剔除异常值 / 取数期间）。
+   此外只有 4 条规则支持校准，`OCF_DIVERGE`、`GOODWILL` 等仍是全市场固定线。
+10. **基准簿按 p75 单分位校准**：只用了第 75 百分位，没用 p50/p90 构成区间。
+    更稳妥的做法是给出"行业中位 ~ 高分位"的带，让判定落在带内时不报、超出上界才报。
+11. **底稿的程序区是按执行动作反推的**：勾稽、分析、趋势三项程序由实际跑过的环节生成，
+    但"追加函证""实地走访"这类需要人工触发的程序不会自动出现，
+    底稿仍需要人工补程序、签编制人/复核人名。
 
 ## 下一步（按优先级）
 
-1. 接真实 LLM，对比 `NullLLM` 模板与模型生成的研判质量差异（用同一批 findings 做 A/B）
-2. ~~补多期趋势规则：连续两期以上的恶化应升级严重度~~ **已完成**——
-   已落地序列规则 `QUALITY_DRIFT`、持续性升级机制、CLI `--periods` 入口、
-   4 期 fixture 与 21 个新测试。待办转为：给 `QUALITY_DRIFT` 的 5 项指标加重要性权重
-3. 引入行业基准：`AR_GAP` 的观察线应随行业调整，而非全市场统一
-4. 对 `scale` 与各项权重做敏感性分析，给出"分数在什么参数下会改变结论"的边界
-5. 输出成正式底稿格式（Word/PDF），让分析结果能直接进审计工作底稿
+1. **接真实 LLM 跑 A/B**：框架与四维指标已就绪，缺的只是一次真实运行。
+   重点不是看模型"写得好不好"，是看它在**事实保真度**上能否稳定 100%——
+   保真度掉下来的模型，写得再漂亮也不能用。
+2. 给 `QUALITY_DRIFT` 的 5 项指标加重要性权重（毛利率 > 净利率 > 现金流 > 杠杆 > 流动性）
+3. 把行业基准换成真实数据源，并从单分位（p75）升级为区间（p50~p90）
+4. 收集专家标注样本，用样本校准 scale 与权重，替代当前的手工设定
+5. ~~补多期趋势规则~~ **已完成**——序列规则 `QUALITY_DRIFT`、持续性升级、CLI `--periods`、4 期 fixture
+6. ~~引入行业基准~~ **已完成**——`benchmarks.py` + 4 条规则校准 + 双向验证测试
+7. ~~scale 与权重敏感性分析~~ **已完成**——`scripts/sensitivity.py`，35 组合网格
+8. ~~输出审计底稿格式~~ **已完成**——`workpaper.py`，Markdown + xlsx 五张表
 
 ---
 

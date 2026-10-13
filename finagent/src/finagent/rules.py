@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Sequence
 
+from .benchmarks import BenchmarkBook
 from .models import FinancialStatement, Finding, Level, StatementSeries
 
 
@@ -76,91 +77,213 @@ class RuleBook:
     trend_min_agree: int = 3
 
 
+# ---------------------------------------------------------------- 行业校准辅助
+#
+# 规则与阈值分离之后，第二个分离是"判定策略"与"参照数据"分离：
+#     RuleBook      判定策略（阈值该定多少，人拍的）
+#     BenchmarkBook 参照数据（同行实际分布，随样本更新）
+# 两者都不要求改规则逻辑，但生命周期不同，所以分开存放。
+
+
+def _benchmark_aware(fn):
+    """标记该规则支持行业基准校准。
+
+    与 `_series_rule` 同一套思路：用标记而非签名内省，
+    让 RuleEngine 在分发时知道要不要多传一个 benchmarks 参数。
+    """
+    fn.is_benchmark_aware = True
+    return fn
+
+
+def _industry_line(
+    bm: BenchmarkBook | None,
+    cur: FinancialStatement,
+    metric: str,
+    abs_warn: float,
+    abs_high: float,
+    q: str = "p75",
+) -> tuple[float, float, str]:
+    """按行业校准观察线，返回 (关注线, 重大线, 来源)。
+
+    三条规则，缺一不可：
+
+    1. **无基准簿 / 行业不在表里 / 样本量不足 → 原样返回绝对线**。
+       这是向后兼容底线：不传 benchmarks 时，所有规则行为与改造前逐字一致。
+    2. **只校准基准线（关注线），重大线按原有倍数推导**。
+       "关注/重大"的比例关系是判定策略（需要解释 vs 需要专项核查），
+       不该跟着行业样本漂移——否则同一个剪刀差在不同行业会跨档。
+    3. **必须返回来源**。调用方要把它写进 evidence.line_source。
+       财务工具不能悄悄换阈值：读者看到"观察线 12pct"时，
+       必须能回答"这个 12 是哪来的"。
+    """
+    industry = cur.meta.get("industry")
+    if bm is None or not industry:
+        return float(abs_warn), float(abs_high), "absolute"
+    line, src = bm.line(industry, metric, abs_warn, q)
+    if src == "absolute":
+        return float(abs_warn), float(abs_high), "absolute"
+    ratio = (abs_high / abs_warn) if abs_warn else 2.0
+    return line, line * ratio, src
+
+
+def _line_note(industry: str | None, src: str) -> str:
+    """观察线来源的人类可读附注，拼进 detail 让读者看见校准发生了。
+
+    注意 src 同时是 evidence.line_source 的机器可读值（"industry:p75"），
+    这里要做一层翻译——底稿和 JSON 消费方要精确值，报告读者要看得懂，
+    两种表示各取所需，但不能把 "industry:p75" 直接扔进中文正文。
+    """
+    if src == "absolute":
+        return ""
+    q = src.split(":", 1)[1] if ":" in src else src
+    return f"；已按{industry}行业 {q} 分位校准"
+
+
 # ---------------------------------------------------------------- 规则实现
 #
 # 每条规则签名统一：(当前期, 上期, 规则簿) -> Finding | None
 # 返回 None 表示该规则未触发。
 
 
+@_benchmark_aware
 def rule_receivable_growth_gap(
-    cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
+    cur: FinancialStatement,
+    prev: FinancialStatement,
+    rb: RuleBook,
+    benchmarks: BenchmarkBook | None = None,
 ) -> Finding | None:
     """应收账款增速 vs 营收增速：收入质量的核心信号。
 
     若应收增长显著快于营收，说明收入可能靠放宽信用政策换来的，
     回款风险上升，甚至有提前确认收入的嫌疑。
+
+    行业校准理由：快速消费品靠渠道铺货，应收增速快于营收近乎常态；
+    软件开发多为预收款，应收本就少。同一条 20pct 线衡量两者必错一头。
     """
     g_recv = cur.yoy("accounts_receivable", prev)
     g_rev = cur.yoy("revenue", prev)
     if g_recv is None or g_rev is None:
         return None
     gap = g_recv - g_rev
-    if gap < rb.receivable_gap_warn:
+    warn, high, src = _industry_line(
+        bm=benchmarks, cur=cur, metric="ar_growth_gap",
+        abs_warn=rb.receivable_gap_warn, abs_high=rb.receivable_gap_high,
+    )
+    if gap < warn:
         return None
-    level = Level.HIGH if gap >= rb.receivable_gap_high else Level.WARN
+    level = Level.HIGH if gap >= high else Level.WARN
+    industry = cur.meta.get("industry")
     return Finding(
         rule_id="AR_GAP",
         level=level,
         title="应收账款增速显著快于营业收入",
         detail=(
             f"应收账款同比 {g_recv:+.1f}%，营业收入同比 {g_rev:+.1f}%，"
-            f"剪刀差 {gap:.1f} 个百分点（观察线 {rb.receivable_gap_warn:.0f}pct）。"
+            f"剪刀差 {gap:.1f} 个百分点（观察线 {warn:.0f}pct{_line_note(industry, src)}）。"
             f"收入可能依赖放宽信用政策实现，回款质量存疑。"
         ),
         items=["accounts_receivable", "revenue"],
-        evidence={"receivable_yoy": round(g_recv, 2), "revenue_yoy": round(g_rev, 2), "gap_pct": round(gap, 2)},
+        evidence={
+            "receivable_yoy": round(g_recv, 2),
+            "revenue_yoy": round(g_rev, 2),
+            "gap_pct": round(gap, 2),
+            "line_warn": round(warn, 2),
+            "line_high": round(high, 2),
+            "line_source": src,
+        },
         basis="应收增速与营收增速的剪刀差是收入质量恶化的经典先行指标",
     )
 
 
+@_benchmark_aware
 def rule_inventory_growth_gap(
-    cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
+    cur: FinancialStatement,
+    prev: FinancialStatement,
+    rb: RuleBook,
+    benchmarks: BenchmarkBook | None = None,
 ) -> Finding | None:
-    """存货增速 vs 营收增速：存货积压 / 跌价准备不足。"""
+    """存货增速 vs 营收增速：存货积压 / 跌价准备不足。
+
+    行业校准理由：工程机械备货周期长、在产订单多，存货增速高于营收是常态；
+    软件开发的"存货"基本只剩实施成本，波动天然小。
+    """
     g_inv = cur.yoy("inventory", prev)
     g_rev = cur.yoy("revenue", prev)
     if g_inv is None or g_rev is None:
         return None
     gap = g_inv - g_rev
-    if gap < rb.inventory_gap_warn:
+    warn, high, src = _industry_line(
+        bm=benchmarks, cur=cur, metric="inv_growth_gap",
+        abs_warn=rb.inventory_gap_warn, abs_high=rb.inventory_gap_high,
+    )
+    if gap < warn:
         return None
-    level = Level.HIGH if gap >= rb.inventory_gap_high else Level.WARN
+    level = Level.HIGH if gap >= high else Level.WARN
+    industry = cur.meta.get("industry")
     return Finding(
         rule_id="INV_GAP",
         level=level,
         title="存货增速显著快于营业收入",
         detail=(
-            f"存货同比 {g_inv:+.1f}%，营业收入同比 {g_rev:+.1f}%，剪刀差 {gap:.1f} 个百分点。"
+            f"存货同比 {g_inv:+.1f}%，营业收入同比 {g_rev:+.1f}%，剪刀差 {gap:.1f} 个百分点"
+            f"（观察线 {warn:.0f}pct{_line_note(industry, src)}）。"
             f"存在存货积压或跌价准备计提不充分的风险。"
         ),
         items=["inventory", "revenue"],
-        evidence={"inventory_yoy": round(g_inv, 2), "revenue_yoy": round(g_rev, 2), "gap_pct": round(gap, 2)},
+        evidence={
+            "inventory_yoy": round(g_inv, 2),
+            "revenue_yoy": round(g_rev, 2),
+            "gap_pct": round(gap, 2),
+            "line_warn": round(warn, 2),
+            "line_high": round(high, 2),
+            "line_source": src,
+        },
         basis="存货增速持续高于营收增速通常指向滞销或减值计提不足",
     )
 
 
+@_benchmark_aware
 def rule_gross_margin_swing(
-    cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
+    cur: FinancialStatement,
+    prev: FinancialStatement,
+    rb: RuleBook,
+    benchmarks: BenchmarkBook | None = None,
 ) -> Finding | None:
-    """毛利率同比大幅变动，需要合理解释。"""
+    """毛利率同比大幅变动，需要合理解释。
+
+    行业校准理由：软件开发的毛利率对版本发布节奏极敏感，单期 5pct 波动
+    未必异常；快速消费品的成本结构刚性，波动通常来自真实经营变化。
+    """
     gm_cur, gm_prev = cur.gross_margin(), prev.gross_margin()
     if gm_cur is None or gm_prev is None:
         return None
     delta = gm_cur - gm_prev
-    if abs(delta) < rb.gross_margin_warn:
+    warn, high, src = _industry_line(
+        bm=benchmarks, cur=cur, metric="gross_margin_delta",
+        abs_warn=rb.gross_margin_warn, abs_high=rb.gross_margin_high,
+    )
+    if abs(delta) < warn:
         return None
-    level = Level.HIGH if abs(delta) >= rb.gross_margin_high else Level.WARN
+    level = Level.HIGH if abs(delta) >= high else Level.WARN
     direction = "上升" if delta > 0 else "下降"
+    industry = cur.meta.get("industry")
     return Finding(
         rule_id="GM_SWING",
         level=level,
         title=f"毛利率同比大幅{direction}",
         detail=(
             f"毛利率由 {gm_prev:.2f}% 变为 {gm_cur:.2f}%，变动 {delta:+.2f} 个百分点"
-            f"（观察线 ±{rb.gross_margin_warn:.0f}pct）。需核实成本结转或产品结构是否发生变化。"
+            f"（观察线 ±{warn:.0f}pct{_line_note(industry, src)}）。需核实成本结转或产品结构是否发生变化。"
         ),
         items=["revenue", "cost_of_sales"],
-        evidence={"gross_margin_prev": round(gm_prev, 2), "gross_margin_cur": round(gm_cur, 2), "delta_pct": round(delta, 2)},
+        evidence={
+            "gross_margin_prev": round(gm_prev, 2),
+            "gross_margin_cur": round(gm_cur, 2),
+            "delta_pct": round(delta, 2),
+            "line_warn": round(warn, 2),
+            "line_high": round(high, 2),
+            "line_source": src,
+        },
         basis="毛利率异常波动需与产品结构、原材料价格、成本结转口径变化相互印证",
     )
 
@@ -189,28 +312,49 @@ def rule_cash_profit_divergence(
     )
 
 
+@_benchmark_aware
 def rule_debt_ratio(
-    cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
+    cur: FinancialStatement,
+    prev: FinancialStatement,
+    rb: RuleBook,
+    benchmarks: BenchmarkBook | None = None,
 ) -> Finding | None:
-    """资产负债率过高。"""
+    """资产负债率过高。
+
+    行业校准理由：这是行业差异最大的一项。房地产与建筑施工 78% 是常态，
+    软件开发 35% 已属偏高。用统一的 70% 线，前者永远不报警，后者天天误报。
+    """
     dr = cur.debt_ratio()
-    if dr is None or dr < rb.debt_ratio_warn:
+    if dr is None:
         return None
-    level = Level.HIGH if dr >= rb.debt_ratio_high else Level.WARN
+    warn, high, src = _industry_line(
+        bm=benchmarks, cur=cur, metric="debt_ratio",
+        abs_warn=rb.debt_ratio_warn, abs_high=rb.debt_ratio_high,
+    )
+    if dr < warn:
+        return None
+    level = Level.HIGH if dr >= high else Level.WARN
     prev_dr = prev.debt_ratio()
     trend = ""
     if prev_dr is not None:
         trend = f"，上年同期 {prev_dr:.2f}%（{dr - prev_dr:+.2f}pct）"
+    industry = cur.meta.get("industry")
     return Finding(
         rule_id="DEBT_RATIO",
         level=level,
         title="资产负债率处于高位",
         detail=(
-            f"资产负债率 {dr:.2f}%（观察线 {rb.debt_ratio_warn:.0f}%）{trend}。"
+            f"资产负债率 {dr:.2f}%（观察线 {warn:.0f}%{_line_note(industry, src)}）{trend}。"
             f"偿债压力与再融资能力需一并评估。"
         ),
         items=["total_liabilities", "total_assets"],
-        evidence={"debt_ratio": round(dr, 2), "prev_debt_ratio": round(prev_dr, 2) if prev_dr is not None else None},
+        evidence={
+            "debt_ratio": round(dr, 2),
+            "prev_debt_ratio": round(prev_dr, 2) if prev_dr is not None else None,
+            "line_warn": round(warn, 2),
+            "line_high": round(high, 2),
+            "line_source": src,
+        },
         basis="资产负债率是杠杆水平与偿债风险的基础度量",
     )
 
@@ -374,6 +518,7 @@ def escalate_persistent_findings(
     findings: list[Finding],
     series: StatementSeries,
     rb: RuleBook,
+    benchmarks: BenchmarkBook | None = None,
 ) -> list[Finding]:
     """对跨期持续出现的信号升级严重度。
 
@@ -383,6 +528,10 @@ def escalate_persistent_findings(
 
     判定标准：某条规则在最近 trend_min_periods-1 个相邻期配对上**全部**触发。
     "连续"而非"累计"——中间断一期说明情况有变化，不能算持续。
+
+    benchmarks 必须与主引擎用的是同一本：持续性判定要重跑历史配对，
+    若这里用绝对线而主引擎用了行业校准线，两边的触发集不一致，
+    升级结论就不可信了。
     """
     if not series.has_trend(rb.trend_min_periods):
         return findings
@@ -397,7 +546,10 @@ def escalate_persistent_findings(
     for prev_s, cur_s in recent:
         for rule in _PAIR_RULES:
             try:
-                f = rule(cur_s, prev_s, rb)
+                if getattr(rule, "is_benchmark_aware", False):
+                    f = rule(cur_s, prev_s, rb, benchmarks=benchmarks)
+                else:
+                    f = rule(cur_s, prev_s, rb)
             except Exception:  # noqa: BLE001 — 与主引擎一致的隔离策略
                 continue
             if f is not None:
@@ -499,22 +651,34 @@ _PAIR_RULES: tuple[Callable[..., Finding | None], ...] = tuple(
 
 @dataclass
 class RuleEngine:
-    """规则的执行容器。rules 可替换，便于做规则的增删实验。"""
+    """规则的执行容器。rules 可替换，便于做规则的增删实验。
+
+    benchmarks 挂在引擎上而不是 RuleBook 里：RuleBook 是判定策略，
+    BenchmarkBook 是参照数据，两者生命周期不同。策略是人拍的、稳定；
+    行业分布随样本更新、会变。混在一个 dataclass 里会让"改阈值"
+    和"换数据源"两件事纠缠不清。
+    """
 
     book: RuleBook = field(default_factory=RuleBook)
     rules: tuple[Callable[..., Finding | None], ...] = DEFAULT_RULES
+    benchmarks: BenchmarkBook | None = None
 
     def run(
         self,
         cur: FinancialStatement,
         prev: FinancialStatement,
         series: StatementSeries | None = None,
+        benchmarks: BenchmarkBook | None = None,
     ) -> list[Finding]:
         """跑全部规则，按严重度倒序返回（HIGH 在前）。
 
         series 可选：传入多期序列时，额外执行趋势规则并对持续信号升级严重度。
         只传两期时行为与之前完全一致——这是为了让现有调用方无感升级。
+
+        benchmarks 可选：覆盖引擎级默认值，便于同一次运行里对比
+        "绝对线 vs 行业校准线"（A/B 场景）。不传则用构造时的那一本。
         """
+        bm = benchmarks if benchmarks is not None else self.benchmarks
         out: list[Finding] = []
         for rule in self.rules:
             try:
@@ -522,6 +686,8 @@ class RuleEngine:
                     if series is None or not series.has_trend(self.book.trend_min_periods):
                         continue
                     f = rule(series, self.book)
+                elif getattr(rule, "is_benchmark_aware", False):
+                    f = rule(cur, prev, self.book, benchmarks=bm)
                 else:
                     f = rule(cur, prev, self.book)
             except Exception as e:  # noqa: BLE001 — 单条规则失败不应拖垮整轮
@@ -540,7 +706,7 @@ class RuleEngine:
                 out.append(f)
 
         if series is not None:
-            out = escalate_persistent_findings(out, series, self.book)
+            out = escalate_persistent_findings(out, series, self.book, benchmarks=bm)
 
         out.sort(key=lambda f: (-int(f.level), f.rule_id))
         return out

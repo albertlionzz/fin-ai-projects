@@ -1,0 +1,29 @@
+{
+  "period": "2025A",
+  "meta": {
+    "company": "恒润重工",
+    "unit": "万元",
+    "industry": "工程机械",
+    "source": "模拟数据，用于演示行业基准校准",
+    "note": "当期。刻意设计成『全市场口径零异常、同行业口径两项进最差四分之一』：应收剪刀差 15pct（绝对线 20 不触发，工程机械 p75=12 触发）；资产负债率 62%（绝对线 70 不触发，工程机械 p75=60 触发）。"
+  },
+  "items": {
+    "revenue": 55000.0,
+    "cost_of_sales": 44000.0,
+    "net_profit": 3630.0,
+    "accounts_receivable": 25000.0,
+    "inventory": 12000.0,
+    "total_assets": 120000.0,
+    "total_liabilities": 74400.0,
+    "total_equity": 45600.0,
+    "net_assets": 45600.0,
+    "current_assets": 70000.0,
+    "current_liabilities": 45000.0,
+    "operating_cash_flow": 4000.0,
+    "goodwill": 0.0,
+    "selling_expense": 3200.0,
+    "admin_expense": 2600.0,
+    "rd_expense": 1800.0,
+    "finance_expense": 1200.0
+  }
+}

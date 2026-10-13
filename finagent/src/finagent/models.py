@@ -219,6 +219,54 @@ class AgentTrace:
         }
 
 
+@dataclass(frozen=True)
+class ScorePolicy:
+    """风险分的全部可调参数。
+
+    抽出来是为了两件事：
+
+    1. **敏感性分析有真实代码路径可走**。参数如果硬编码在方法里，
+       做敏感性就只能另写一份公式——那份副本会悄悄和主线逻辑漂移，
+       跑出来的"稳健区间"是假的。
+    2. **让"参数该定多少"成为一个可单独讨论的对象**。与 RuleBook
+       阈值集中管理是同一个思路：改参数不改逻辑。
+
+    `DEFAULT_POLICY` 就是长期以来的线上行为，任何人不传参数时结果不变。
+    """
+
+    # 饱和函数的尺度。越大则同样 raw 分越低、曲线越平。
+    scale: float = 20.0
+
+    # 严重度权重
+    w_high: float = 10.0
+    w_warn: float = 4.0
+    w_info: float = 1.0
+
+    # 分数 → 档位 的切点
+    grade_very_high: float = 85.0
+    grade_high: float = 65.0
+    grade_mid: float = 35.0
+
+    # 重大异常数量 → 档位 的门槛
+    sev_very_high: int = 4     # 重大达到几项，档位不得低于「极高」
+    sev_high: int = 1          # 重大达到几项，档位不得低于「高」
+
+    def to_dict(self) -> dict:
+        return {
+            "scale": self.scale,
+            "weights": {"high": self.w_high, "warn": self.w_warn, "info": self.w_info},
+            "grade_cutoffs": {
+                "very_high": self.grade_very_high,
+                "high": self.grade_high,
+                "mid": self.grade_mid,
+            },
+            "severity_counts": {"very_high": self.sev_very_high, "high": self.sev_high},
+        }
+
+
+DEFAULT_POLICY = ScorePolicy()
+
+
 @dataclass
 class AnalysisResult:
     """一次完整分析的产出。"""
@@ -239,7 +287,7 @@ class AnalysisResult:
     def warn_count(self) -> int:
         return sum(1 for f in self.findings if f.level == Level.WARN)
 
-    def risk_score(self) -> float:
+    def risk_score(self, policy: ScorePolicy | None = None) -> float:
         """0~100 的风险分。
 
         用饱和函数而非线性累加：线性累加在重大异常多时会直接顶到 100 被封顶，
@@ -248,15 +296,16 @@ class AnalysisResult:
 
         scale 取 20 是经验值：按现在权重，约 3 项重大 + 2 项关注能到 70 分区间。
         这个参数应该随历史样本回测校准——在没有样本之前，任何精确的加权都是伪精确。
+        校准方法见 scripts/sensitivity.py。
         """
+        p = policy or DEFAULT_POLICY
         if not self.findings:
             return 0.0
-        w = {Level.HIGH: 10.0, Level.WARN: 4.0, Level.INFO: 1.0}
+        w = {Level.HIGH: p.w_high, Level.WARN: p.w_warn, Level.INFO: p.w_info}
         raw = sum(w[f.level] * f.confidence for f in self.findings)
-        scale = 20.0
-        return (1.0 - _math.exp(-raw / scale)) * 100.0
+        return (1.0 - _math.exp(-raw / p.scale)) * 100.0
 
-    def risk_grade(self) -> str:
+    def risk_grade(self, policy: ScorePolicy | None = None) -> str:
         """把 0~100 的风险分映射到可执行档位。
 
         取两个维度的较高者，缺一不可：
@@ -270,27 +319,28 @@ class AnalysisResult:
         的自相矛盾输出（重大项少时饱和函数得分偏低）。这是设计缺陷，
         不是阈值问题——**建议动作必须与最严重发现的等级自洽。**
         """
+        p = policy or DEFAULT_POLICY
         if not self.findings:
             return "低"
 
         order = ["低", "中", "高", "极高"]
 
         # 维度一：分数档
-        s = self.risk_score()
-        if s >= 85:
+        s = self.risk_score(p)
+        if s >= p.grade_very_high:
             by_score = "极高"
-        elif s >= 65:
+        elif s >= p.grade_high:
             by_score = "高"
-        elif s >= 35:
+        elif s >= p.grade_mid:
             by_score = "中"
         else:
             by_score = "低"
 
         # 维度二：严重度档（重大异常数量）
         n_high = self.high_count
-        if n_high >= 4:
+        if n_high >= p.sev_very_high:
             by_severity = "极高"
-        elif n_high >= 1:
+        elif n_high >= p.sev_high:
             by_severity = "高"
         else:
             by_severity = "中"
