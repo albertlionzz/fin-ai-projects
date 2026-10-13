@@ -35,3 +35,6 @@ desktop.ini
 *.log
 *.tmp
 report.html
+
+# 本地推送辅助脚本（不入库）
+push-to-github.bat
