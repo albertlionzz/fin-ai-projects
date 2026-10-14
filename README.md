@@ -47,7 +47,7 @@ finrag/
 | 解决的问题 | 从两期或多期财务数字里**发现异常**并说明依据 |
 | 核心产物 | 带回溯依据的异常清单 + 风险分与等级 + 审计底稿 |
 | 评测方式 | 规则召回率 / 误报率 / 可复算性 / 研判质量四维指标 |
-| 实测 | 植入 7 类异常全命中，133 个测试通过；4 期趋势模式可识别单期阈值法漏掉的慢性恶化；行业校准可双向调整灵敏度；35 组参数里 24 组不翻档 |
+| 实测 | 植入 7 类异常全命中，152 个测试通过；4 期趋势模式可识别单期阈值法漏掉的慢性恶化；行业校准可双向调整灵敏度；35 组参数里 24 组不翻档；行业基准已从 auditdog.cn 真实抓取（食品饮料 111 家），44 家公司判定因校准改变 |
 
 **核心立场：确定性优先，LLM 只在最后一环介入。**
 
@@ -67,8 +67,10 @@ finagent/
 ├── scripts/
 │   ├── run.py         CLI：analyze / workpaper / extract / rules / batch
 │   ├── sensitivity.py 风险分参数敏感性分析（scale × 权重比网格）
+│   ├── fetch_benchmarks.py      从 auditdog.cn 抓三大报表，构建真实行业基准簿
+│   ├── build_fixture_from_raw.py 把爬虫缓存还原成 finagent statement JSON
 │   └── ab_test.py     研判质量 A/B（--stub 框架自检 / --api 真实模型）
-└── tests/test_analysis.py   133 个单元测试
+└── tests/test_analysis.py   152 个单元测试
 ```
 
 四项能力递进，每一项都解决上一项暴露的问题：

@@ -38,3 +38,12 @@ report.html
 
 # 本地推送辅助脚本（不入库）
 push-to-github.bat
+
+# finagent 行业基准抓取的本地缓存与运行报告
+# HTML 缓存一家公司四页、全行业跑下来上 GB，且改口径重跑会重新生成
+finagent/data/benchmarks/raw/
+finagent/data/benchmarks/build_report.json
+
+# 数据源勘查痕迹：站点结构反推、API 试探、RSC payload 样本。
+# 是"怎么知道能这么抓"的取证记录，保留备查，但不必入库
+.scratch/

@@ -1328,6 +1328,251 @@ class TestAbMetrics(unittest.TestCase):
         self.assertEqual(rep.score, 1.0, f"模板出现无依据数字：{rep.ungrounded}")
 
 
+def _load_fetch_module():
+    """把 scripts/fetch_benchmarks.py 当模块加载。
+
+    它是脚本不是包内模块（站点抓取逻辑不该进核心库），但解析与口径这些纯函数
+    值得被测试钉住——尤其是金额格式与 gross_margin_delta 的绝对值口径。
+    """
+    import importlib.util
+
+    path = ROOT / "scripts" / "fetch_benchmarks.py"
+    spec = importlib.util.spec_from_file_location("finagent_fetch_benchmarks", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestBenchmarkFeed(unittest.TestCase):
+    """fetch_benchmarks.py 的纯函数：解析、口径、分位数（零网络）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.fb = _load_fetch_module()
+
+    # --- 金额解析 ---
+
+    def test_parse_amount_formats(self):
+        p = self.fb.parse_amount
+        self.assertEqual(p("4,237.02 亿"), 423702000000.0)
+        self.assertEqual(p("42 亿"), 4200000000.0)          # 无小数位
+        self.assertEqual(p("87,407,775.73"), 87407775.73)   # 小额给全精度
+        self.assertEqual(p("-9.63 亿"), -963000000.0)       # 负值
+        self.assertEqual(p("35,515,000"), 35515000.0)
+        self.assertEqual(p("1.5 万亿"), 1.5e12)
+
+    def test_parse_amount_null_markers(self):
+        for s in ("—", "-", "", "   ", "N/A"):
+            self.assertIsNone(self.fb.parse_amount(s))
+
+    def test_parse_amount_rejects_unknown(self):
+        """认不出的格式必须炸，不能静默变 None——基准会悄悄失真。"""
+        for s in ("96.1%", "0.49 倍", "abc", "1.2 亿美元"):
+            with self.assertRaises(ValueError):
+                self.fb.parse_amount(s)
+
+    # --- 行抽取 ---
+
+    def test_extract_rows_takes_first_value_per_row(self):
+        """科目名与值之间可能夹"注 ↗"链接，切段取首个数值单元格才对。"""
+        html = (
+            '<li id="row-INVENTORY" class="x"><span>存货</span>'
+            '<a title="查看该科目年报附注原文" href="/notes">注</a>'
+            '<span class="tabular-nums">945.26 亿</span></li>'
+            '<li id="row-CONTRACT_ASSET"><span>合同资产</span>'
+            '<span class="tabular-nums">—</span></li>'
+        )
+        rows = self.fb.extract_rows(html, {"INVENTORY", "CONTRACT_ASSET"})
+        self.assertEqual(rows["INVENTORY"], "945.26 亿")
+        self.assertEqual(rows["CONTRACT_ASSET"], "—")
+
+    def test_extract_rows_ignores_rsc_duplicate(self):
+        """页面同时含 SSR HTML 与 RSC payload，同一行出现两次，取首次。"""
+        row = ('<li id="row-TOTAL_ASSETS"><span>资产总计</span>'
+               '<span class="tabular-nums">106.91 亿</span></li>')
+        html = row + "<script>" + row + "</script>"
+        rows = self.fb.extract_rows(html, {"TOTAL_ASSETS"})
+        self.assertEqual(rows["TOTAL_ASSETS"], "106.91 亿")
+
+    # --- 指标口径 ---
+
+    def test_gross_margin_delta_uses_absolute_value(self):
+        """规则比的是 abs(delta)，基准就必须是绝对变动的分布。"""
+        bs = {"TOTAL_ASSETS": "100 亿", "TOTAL_LIABILITIES": "50 亿",
+              "ACCOUNTS_RECE": "10 亿", "INVENTORY": "20 亿"}
+        is_cur = {"OPERATE_INCOME": "80 亿", "OPERATE_COST": "60 亿"}    # 毛利率 25%
+        is_prev = {"OPERATE_INCOME": "80 亿", "OPERATE_COST": "64 亿"}   # 毛利率 20%
+        m = self.fb.compute_metrics(bs, bs, is_cur, is_prev)
+        self.assertAlmostEqual(m["gross_margin_delta"], 5.0, places=6)
+        m2 = self.fb.compute_metrics(bs, bs, is_prev, is_cur)            # 反方向同正
+        self.assertAlmostEqual(m2["gross_margin_delta"], 5.0, places=6)
+
+    def test_growth_gap_math(self):
+        bs_cur = {"TOTAL_ASSETS": "100 亿", "TOTAL_LIABILITIES": "50 亿",
+                  "ACCOUNTS_RECE": "15 亿", "INVENTORY": "20 亿"}
+        bs_prev = {"ACCOUNTS_RECE": "10 亿", "INVENTORY": "18 亿"}
+        is_cur = {"OPERATE_INCOME": "80 亿", "OPERATE_COST": "60 亿"}
+        is_prev = {"OPERATE_INCOME": "100 亿", "OPERATE_COST": "70 亿"}
+        m = self.fb.compute_metrics(bs_cur, bs_prev, is_cur, is_prev)
+        self.assertAlmostEqual(m["ar_growth_gap"], 70.0, places=6)       # +50% −(−20%)
+        self.assertAlmostEqual(m["inv_growth_gap"], 31.111111, places=4)
+
+    def test_materiality_floor_drops_immaterial_base(self):
+        """基期应收只占基期营收 0.005% 时增速无经济意义，不进分布。"""
+        bs_cur = {"TOTAL_ASSETS": "100 亿", "TOTAL_LIABILITIES": "50 亿",
+                  "ACCOUNTS_RECE": "1000 万", "INVENTORY": "20 亿"}
+        bs_prev = {"ACCOUNTS_RECE": "50 万", "INVENTORY": "18 亿"}
+        is_cur = {"OPERATE_INCOME": "80 亿", "OPERATE_COST": "60 亿"}
+        is_prev = {"OPERATE_INCOME": "100 亿", "OPERATE_COST": "70 亿"}
+        m = self.fb.compute_metrics(bs_cur, bs_prev, is_cur, is_prev)
+        self.assertNotIn("ar_growth_gap", m)
+        self.assertIn("inv_growth_gap", m)      # 存货 18 亿是重大的，照算
+
+    def test_missing_income_statement_leaves_debt_ratio(self):
+        bs = {"TOTAL_ASSETS": "106.91 亿", "TOTAL_LIABILITIES": "78.3 亿"}
+        m = self.fb.compute_metrics(bs, None, None, None)
+        self.assertAlmostEqual(m["debt_ratio"], 73.239173, places=4)
+        self.assertNotIn("gross_margin_delta", m)
+
+    # --- 分位数 ---
+
+    def test_percentile_matches_known_values(self):
+        vals = [1.0, 2.0, 3.0, 4.0]
+        self.assertEqual(self.fb.percentile(vals, 0), 1.0)
+        self.assertEqual(self.fb.percentile(vals, 50), 2.5)
+        self.assertEqual(self.fb.percentile(vals, 75), 3.25)
+        self.assertEqual(self.fb.percentile(vals, 100), 4.0)
+        self.assertIsNone(self.fb.percentile([], 75))
+        self.assertEqual(self.fb.percentile([7.0], 75), 7.0)
+
+    # --- 抽样与 ST ---
+
+    def test_stride_sample_spans_roe_range(self):
+        """/data 按 ROE 降序，取前 N 家会得到高 ROE 偏斜的样本。"""
+        items = list(range(100))
+        picked = self.fb.stride_sample(items, 10)
+        self.assertEqual(len(picked), 10)
+        self.assertIn(0, picked)
+        self.assertIn(99, picked)
+        self.assertEqual(self.fb.stride_sample(items, 0), items)
+        self.assertEqual(self.fb.stride_sample(items, 200), items)
+
+    def test_st_detection(self):
+        for n in ("*ST西发", "ST绝味", "*ST春天"):
+            self.assertTrue(self.fb.is_st(n))
+        for n in ("贵州茅台", "东鹏饮料", "宁德时代"):
+            self.assertFalse(self.fb.is_st(n))
+
+    # --- 现金流量表通道 ---
+
+    def test_extract_all_rows_returns_rows_outside_bs_is(self):
+        """extract_rows 只回调用方点名的行；cf 页面的行 ID 事先不确定，
+        必须有一条全量抽取的通道，否则经营现金流永远取不到。"""
+        html = (
+            '<li id="row-OPERATE_INCOME"><span>营业收入</span>'
+            '<span class="tabular-nums">324.73 亿</span></li>'
+            '<li id="row-NETCASH_OPERATE"><span>经营活动产生的现金流量净额</span>'
+            '<span class="tabular-nums">45.93 亿</span></li>'
+        )
+        all_rows = self.fb.extract_all_rows(html)
+        self.assertEqual(all_rows["NETCASH_OPERATE"], "45.93 亿")
+        # 对照：按 BS/IS 行 ID 过滤时，现金流行会被丢掉
+        filtered = self.fb.extract_rows(html, self.fb.BS_ROWS)
+        self.assertNotIn("NETCASH_OPERATE", filtered)
+
+    def test_fetch_statement_cf_uses_cache_without_network(self):
+        """kind="cf" 的缓存命名与解析通道。有缓存就不能发请求——
+        这一点同时被"测试不联网"本身验证。"""
+        import tempfile
+
+        html = ('<li id="row-NETCASH_OPERATE"><span>经营活动产生的现金流量净额</span>'
+                '<span class="tabular-nums">45.93 亿</span></li>')
+        with tempfile.TemporaryDirectory() as td:
+            raw = Path(td)
+            (raw / "600600_2025AR_cf.html").write_text(html, encoding="utf-8")
+            rows = self.fb.fetch_statement("600600", "2025AR", False, raw, 0.0, kind="cf")
+            self.assertEqual(rows["NETCASH_OPERATE"], "45.93 亿")
+
+    def test_fetch_statement_bs_is_still_works(self):
+        """重构后回归：原有 income 布尔参数的口径不能变。"""
+        import tempfile
+
+        bs = ('<li id="row-INVENTORY"><span>存货</span>'
+              '<span class="tabular-nums">32.37 亿</span></li>')
+        isr = ('<li id="row-OPERATE_INCOME"><span>营业收入</span>'
+               '<span class="tabular-nums">324.73 亿</span></li>')
+        with tempfile.TemporaryDirectory() as td:
+            raw = Path(td)
+            (raw / "600600_2025AR_bs.html").write_text(bs, encoding="utf-8")
+            (raw / "600600_2025AR_is.html").write_text(isr, encoding="utf-8")
+            self.assertEqual(
+                self.fb.fetch_statement("600600", "2025AR", False, raw, 0.0)["INVENTORY"],
+                "32.37 亿",
+            )
+            self.assertEqual(
+                self.fb.fetch_statement("600600", "2025AR", True, raw, 0.0)["OPERATE_INCOME"],
+                "324.73 亿",
+            )
+
+
+class TestFixtureBridge(unittest.TestCase):
+    """build_fixture_from_raw.py：把爬虫缓存还原成 finagent statement。"""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+
+        path = ROOT / "scripts" / "build_fixture_from_raw.py"
+        spec = importlib.util.spec_from_file_location("finagent_build_fixture", path)
+        cls.br = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.br)
+
+    def test_period_label_normalized(self):
+        """站点用 2025AR（Annual Report），fixture 用 2025A，两者必须对齐，
+        否则 period_sort_key 之后多期排序会出现不可预期的次序。"""
+        self.assertEqual(self.br.build("x", "2025AR", "x", "")["period"], "2025A")
+        self.assertEqual(self.br.build("x", "2024AR", "x", "")["period"], "2024A")
+        self.assertEqual(self.br.build("x", "2025Q1", "x", "")["period"], "2025Q1")
+        self.assertEqual(self.br.build("x", "2025A", "x", "")["period"], "2025A")
+
+    def test_mapping_covers_every_consumed_item(self):
+        """耦合不变量：模型与规则读到的每个科目，桥接表都必须能产出。
+
+        这条测试钉的是"规则新增了一个科目消费，fixture 却悄悄没有"——
+        那种缺失不会报错，只会让规则永远不触发，看报告完全看不出。
+        """
+        import re
+
+        consumed: set[str] = set()
+        for f in ("src/finagent/models.py", "src/finagent/rules.py"):
+            src = (ROOT / f).read_text(encoding="utf-8")
+            consumed |= set(re.findall(r'yoy\("([a-z_0-9]+)"', src))
+            consumed |= set(re.findall(r'\.(?:get|has|require)\("([a-z_0-9]+)"', src))
+        # 这些是 dict/属性/meta 访问，不是报表科目
+        consumed -= {"meta", "items", "level", "period", "source", "note", "industry"}
+        produced = set(self.br.BS_MAP.values()) | set(self.br.IS_MAP.values()) | set(
+            self.br.CF_MAP.values()
+        )
+        gap = consumed - produced
+        self.assertEqual(gap, set(), f"规则消费但桥接表未覆盖：{sorted(gap)}")
+
+    def test_mapping_has_no_duplicate_target(self):
+        """两个站点行映射到同一个科目会静默互相覆盖。"""
+        seen: dict[str, str] = {}
+        for mapping in (self.br.BS_MAP, self.br.IS_MAP, self.br.CF_MAP):
+            for rid, field in mapping.items():
+                self.assertNotIn(field, seen, f"{field} 被 {seen.get(field)} 与 {rid} 重复映射")
+                seen[field] = rid
+
+    def test_build_reports_missing_fields_honestly(self):
+        """没有缓存又不想联网时，缺失要写进 meta.note，不能默认填 0。"""
+        doc = self.br.build("999999", "2025AR", "不存在的公司", "")
+        self.assertEqual(doc["items"], {})
+        self.assertIn("bs(整表缺失)", doc["meta"]["note"])
+        self.assertIn("is(整表缺失)", doc["meta"]["note"])
+        self.assertIn("cf(整表缺失)", doc["meta"]["note"])
+
+
 def pytest_import(name: str):
     """缺依赖时返回 None，让测试跳过而非报错。"""
     try:

@@ -1,0 +1,45 @@
+{
+  "schema": "finagent-industry-benchmarks/1",
+  "source": "auditdog.cn 三大报表 Beta（站点自上市公司公开年报 AI 抽取），2025AR/2024AR，抓取于 2026-10-15；非审计数据，仅作行业参照系，不作为审计证据。",
+  "as_of": "2026-10-15",
+  "min_peers": 5,
+  "metric_definitions": {
+    "debt_ratio": "负债合计 / 资产总计 × 100（%）",
+    "gross_margin_delta": "|毛利率_本期 − 毛利率_上期|（百分点）。取绝对值是因为规则 AR/GM 判定比较的是 abs(delta)；带符号分布的分位数不构成有效阈值。",
+    "ar_growth_gap": "应收账款同比 − 营业收入同比（百分点）",
+    "inv_growth_gap": "存货同比 − 营业收入同比（百分点）",
+    "_growth_materiality": "增长类指标的材料性门槛：基期科目 < 基期营收的 0.1% 时不计入分布（基期几乎不存在的科目，其增速无经济意义）。",
+    "_n_peers": "行业级 n_peers 取该行业保留指标的最小同行数（最弱环节口径）；各指标自己的同行数见 build_report.json。"
+  },
+  "industries": {
+    "食品饮料": {
+      "n_peers": 103,
+      "metrics": {
+        "ar_growth_gap": {
+          "p50": -2.53,
+          "p75": 23.63,
+          "p90": 73.27,
+          "p95": 142.44
+        },
+        "inv_growth_gap": {
+          "p50": 8.15,
+          "p75": 21.53,
+          "p90": 35.34,
+          "p95": 45.09
+        },
+        "debt_ratio": {
+          "p50": 35.06,
+          "p75": 46.83,
+          "p90": 56.52,
+          "p95": 63.12
+        },
+        "gross_margin_delta": {
+          "p50": 1.33,
+          "p75": 2.86,
+          "p90": 4.42,
+          "p95": 5.79
+        }
+      }
+    }
+  }
+}

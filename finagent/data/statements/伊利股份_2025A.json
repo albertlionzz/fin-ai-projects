@@ -1,0 +1,29 @@
+{
+ "period": "2025A",
+ "meta": {
+  "company": "伊利股份",
+  "unit": "元",
+  "industry": "食品饮料",
+  "source": "auditdog.cn 三大报表 Beta（站点自上市公司公开年报 AI 抽取），经 fetch_benchmarks.py 抓取缓存 600887_2025AR_*.html 还原；非审计数据。",
+  "note": "由 scripts/build_fixture_from_raw.py 从原始 HTML 生成；缺失字段：无"
+ },
+ "items": {
+  "total_assets": 152099000000.0,
+  "total_liabilities": 93554000000.0,
+  "total_equity": 58544000000.0,
+  "net_assets": 54656000000.0,
+  "current_assets": 66370000000.0,
+  "current_liabilities": 91053000000.0,
+  "accounts_receivable": 2987000000.0,
+  "inventory": 10823000000.0,
+  "goodwill": 2182000000.0,
+  "revenue": 115636000000.0,
+  "cost_of_sales": 75654000000.0,
+  "net_profit": 11565000000.0,
+  "selling_expense": 21545000000.0,
+  "admin_expense": 4696000000.0,
+  "rd_expense": 915000000.0,
+  "finance_expense": -691000000.0,
+  "operating_cash_flow": 14344000000.0
+ }
+}

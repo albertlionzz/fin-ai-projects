@@ -29,6 +29,7 @@
 
 其他脚本：
   python scripts/sensitivity.py   风险分参数敏感性分析
+  python scripts/fetch_benchmarks.py   抓真实行业基准（auditdog.cn 三大报表）
   python scripts/ab_test.py       模板 vs LLM 研判质量 A/B
 """
 
