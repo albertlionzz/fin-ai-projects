@@ -1,7 +1,13 @@
 {
-  "mode": "stub",
-  "stub_mode": "good",
+  "mode": "api",
+  "stub_mode": null,
   "runs": 3,
+  "provenance": {
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "base_url": "http://127.0.0.1:11434/v1/chat/completions",
+    "temperature": 0.1,
+    "runs": 3
+  },
   "rows": [
     {
       "scenario": "示例制造 2025A（重大 4 / 关注 3）",
@@ -85,10 +91,10 @@
     },
     {
       "scenario": "示例制造 2025A（重大 4 / 关注 3）",
-      "reasoner": "STUB-good（框架自检）",
+      "reasoner": "LLM（qwen3:4b-instruct-2507-q4_K_M）",
       "fidelity": {
-        "total_numbers": 26,
-        "grounded": 26,
+        "total_numbers": 10,
+        "grounded": 10,
         "ungrounded": [],
         "score": 1.0
       },
@@ -98,17 +104,17 @@
         "missing": [],
         "score": 1.0
       },
-      "restatement": 1.0,
-      "length": 934,
-      "determinism": 1.0,
+      "restatement": 0.0,
+      "length": 640,
+      "determinism": 0.3333,
       "n_runs": 3
     },
     {
       "scenario": "长恒电子 2025A（4 期趋势，重大 2）",
-      "reasoner": "STUB-good（框架自检）",
+      "reasoner": "LLM（qwen3:4b-instruct-2507-q4_K_M）",
       "fidelity": {
-        "total_numbers": 10,
-        "grounded": 10,
+        "total_numbers": 7,
+        "grounded": 7,
         "ungrounded": [],
         "score": 1.0
       },
@@ -118,17 +124,17 @@
         "missing": [],
         "score": 1.0
       },
-      "restatement": 1.0,
-      "length": 341,
-      "determinism": 1.0,
+      "restatement": 0.0,
+      "length": 424,
+      "determinism": 0.3333,
       "n_runs": 3
     },
     {
       "scenario": "恒润重工 2025A（行业校准，关注 2）",
-      "reasoner": "STUB-good（框架自检）",
+      "reasoner": "LLM（qwen3:4b-instruct-2507-q4_K_M）",
       "fidelity": {
-        "total_numbers": 9,
-        "grounded": 9,
+        "total_numbers": 6,
+        "grounded": 6,
         "ungrounded": [],
         "score": 1.0
       },
@@ -138,14 +144,14 @@
         "missing": [],
         "score": 1.0
       },
-      "restatement": 1.0,
-      "length": 291,
-      "determinism": 1.0,
+      "restatement": 0.0,
+      "length": 355,
+      "determinism": 0.3333,
       "n_runs": 3
     },
     {
       "scenario": "空白场景（0 项发现）",
-      "reasoner": "STUB-good（框架自检）",
+      "reasoner": "LLM（qwen3:4b-instruct-2507-q4_K_M）",
       "fidelity": {
         "total_numbers": 0,
         "grounded": 0,
@@ -159,8 +165,8 @@
         "score": 1.0
       },
       "restatement": 0.0,
-      "length": 33,
-      "determinism": 1.0,
+      "length": 112,
+      "determinism": 0.6667,
       "n_runs": 3
     }
   ]

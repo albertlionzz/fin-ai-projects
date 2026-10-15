@@ -63,9 +63,12 @@ python scripts/run.py workpaper --ref A-3 \
 # 5. 风险分参数敏感性分析（scale × 权重比网格，衡量档位是否翻转）
 python scripts/sensitivity.py --md artifacts/sensitivity.md
 
-# 6. 研判质量 A/B 对比（--stub 为框架自检；--api 走真实 OpenAI 兼容端点）
+# 6. 研判质量 A/B 对比（--stub 为框架自检；--llm api 走真实 OpenAI 兼容端点）
 python scripts/ab_test.py --stub good --md artifacts/ab_test.md
-python scripts/ab_test.py --api --model qwen-plus --md artifacts/ab_test_api.md
+# 真实模型：端点/模型/key 走环境变量（本地 llama-server / Ollama 同此）
+FINAGENT_LLM_API=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \
+FINAGENT_LLM_MODEL=qwen-plus FINAGENT_LLM_KEY=sk-xxx \
+python scripts/ab_test.py --llm api --runs 3 --md artifacts/ab_test.md
 
 # 7. 查看已注册的规则与阈值
 python scripts/run.py rules
@@ -553,7 +556,7 @@ finagent/
 │   ├── sensitivity.py  风险分参数敏感性分析（scale × 权重比网格）
 │   ├── fetch_benchmarks.py      从 auditdog.cn 抓三大报表，构建真实行业基准簿
 │   ├── build_fixture_from_raw.py 把爬虫缓存还原成 finagent statement JSON
-│   └── ab_test.py      研判质量 A/B 对比（--stub 框架自检 / --api 真实模型）
+│   └── ab_test.py      研判质量 A/B 对比（--stub 框架自检 / --llm api 真实模型）
 ├── tests/test_analysis.py  169 个单元测试
 ├── data/
 │   ├── statements/
@@ -594,10 +597,17 @@ finagent/
    目前只有一个四期 fixture（长恒电子，五项全坏，新旧口径都触发）做过
    端到端验证。**强弱组合翻转在真实公司上的规模尚未量化**，
    电子行业抓取收尾后会对食品饮料抽样补抓 2023AR 与三期现金流量表补齐。
-8. **未接真实 LLM 验证**：`OpenAICompatLLM` 与 A/B 框架已就绪，但尚未用真实模型跑过。
-   跑法：`python scripts/ab_test.py --api --model qwen-plus`
-   （通义 / DeepSeek / 硅基流动 / vLLM 任一 OpenAI 兼容端点，参数走 `FINAGENT_LLM_API` 与 `FINAGENT_LLM_KEY`）。
-   在此之前，所有 `--stub` 输出只证明框架能跑，不构成模型质量结论。
+8. **真实 LLM 验证只跑过一次，而且是本地 4B 模型**：2026-10-16 用本地 Ollama
+   （qwen3:4b-instruct-2507-q4_K_M，temperature 0.1，每场景 3 次）跑通全链路：
+   事实保真度 4/4 场景 100%（验收线达标）、覆盖率 100%、复述率 0%、
+   可复算性 33%~67%。这次运行还抓出并修掉了覆盖率检查器的一个 bug——
+   stub 照抄标题恒 100%，真实模型一改写措辞就恒 0%，**指标对它的主要用户群
+   恒为 0，等于没有指标**（详见设计说明第十节）。**尚未用云端大模型跑过**：
+   4B 的保真度达标不能外推，云端跑法是
+   `FINAGENT_LLM_API=<端点> FINAGENT_LLM_MODEL=qwen-plus FINAGENT_LLM_KEY=<key>
+   python scripts/ab_test.py --llm api --runs 3`。
+   另外，真实模型在 temperature 0.1 下仍未做到逐字节确定（3 次运行可复算
+   33%~67%）——这实证了"判定交给规则、措辞才交给 LLM"的架构主张。
 9. **默认基准簿仍是模拟数据，真实数据要显式抓取**：`industry_benchmarks.json`
    是演示 fixture（测试钉住其具体数值，不能覆盖）；真实抓取产物在
    `industry_benchmarks.auditdog.json`，由 `scripts/fetch_benchmarks.py` 生成。
@@ -628,9 +638,10 @@ finagent/
 
 ## 下一步（按优先级）
 
-1. **接真实 LLM 跑 A/B**：框架与四维指标已就绪，缺的只是一次真实运行。
-   重点不是看模型"写得好不好"，是看它在**事实保真度**上能否稳定 100%——
-   保真度掉下来的模型，写得再漂亮也不能用。
+1. ~~**接真实 LLM 跑 A/B**~~ **本地已跑通**——qwen3:4b（temperature 0.1，每场景 3 次）
+   事实保真度 4/4 场景 100%、覆盖率 100%、复述率 0%、可复算 33%~67%，
+   并由此修掉了覆盖率检查器的一个 bug（见设计说明第十节）。
+   剩余边界：**云端大模型尚未跑**（4B 达标不能外推），跑法见已知局限 8。
 2. ~~给 `QUALITY_DRIFT` 的 5 项指标加重要性权重
    （毛利率 > 净利率 > 现金流 > 杠杆 > 流动性）~~ **已完成**——
    加权得分替代等权计数，"毛利率+净利率齐坏"（5 分）触发、

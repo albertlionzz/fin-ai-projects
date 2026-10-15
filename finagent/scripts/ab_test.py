@@ -222,8 +222,9 @@ def run_reasoner(
     return [agent.reason(sc.company, sc.period, sc.findings) for _ in range(runs)]
 
 
-def sweep(scenarios: Sequence[Scenario], runs: int, llm_mode: str, stub_mode: str) -> list[ComparisonRow]:
+def sweep(scenarios: Sequence[Scenario], runs: int, llm_mode: str, stub_mode: str) -> tuple[list[ComparisonRow], dict]:
     rows: list[ComparisonRow] = []
+    provenance: dict = {}
 
     # A 侧：模板（NullLLM → 确定性聚合模板）
     for sc in scenarios:
@@ -235,6 +236,14 @@ def sweep(scenarios: Sequence[Scenario], runs: int, llm_mode: str, stub_mode: st
     if llm_mode == "api":
         llm = OpenAICompatLLM()
         label = f"LLM（{llm.model}）"
+        # 出处必须随报告落盘：同一个指标换个模型可能是另一个结论，
+        # 没有模型/端点/温度的 A/B 报告不可复算，等于没有报告。
+        provenance = {
+            "model": llm.model,
+            "base_url": llm.base_url,
+            "temperature": llm.temperature,
+            "runs": runs,
+        }
     else:
         llm = StubLLM(mode=stub_mode, name=f"stub-{stub_mode}")
         label = f"STUB-{stub_mode}（框架自检）"
@@ -243,7 +252,7 @@ def sweep(scenarios: Sequence[Scenario], runs: int, llm_mode: str, stub_mode: st
         outs = run_reasoner(agent, sc, runs)
         rows.append(evaluate(sc.name, label, outs, sc.findings))
 
-    return rows
+    return rows, provenance
 
 
 # ---------------------------------------------------------------- 输出
@@ -336,7 +345,7 @@ def render_console(rows: Sequence[ComparisonRow], is_stub: bool) -> str:
     return "\n".join(L)
 
 
-def render_markdown(rows: Sequence[ComparisonRow], is_stub: bool, runs: int) -> str:
+def render_markdown(rows: Sequence[ComparisonRow], is_stub: bool, runs: int, provenance: dict | None = None) -> str:
     L: list[str] = []
     L.append("# 研判质量 A/B 对比")
     L.append("")
@@ -347,6 +356,10 @@ def render_markdown(rows: Sequence[ComparisonRow], is_stub: bool, runs: int) -> 
     else:
         L.append("> 真实模型对比。同一批 findings，两个研判器，各跑 "
                  f"{runs} 次取首次输出作为评分对象。")
+    if provenance:
+        L.append(">")
+        L.append(f"> **模型出处**：`{provenance['model']}`　端点 `{provenance['base_url']}`　"
+                 f"temperature {provenance['temperature']}　每场景 {provenance['runs']} 次")
     L.append("")
     L.append("## 一、对比维度")
     L.append("")
@@ -422,7 +435,7 @@ def main() -> int:
               f"共 {args.runs * 4} 次。", file=sys.stderr)
 
     scenarios = build_scenarios()
-    rows = sweep(scenarios, args.runs, args.llm, args.stub)
+    rows, provenance = sweep(scenarios, args.runs, args.llm, args.stub)
     is_stub = args.llm != "api"
 
     print(render_console(rows, is_stub))
@@ -430,7 +443,7 @@ def main() -> int:
     if args.md:
         out = Path(args.md)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(render_markdown(rows, is_stub, args.runs), encoding="utf-8")
+        out.write_text(render_markdown(rows, is_stub, args.runs, provenance), encoding="utf-8")
         print(f"\n[ok] Markdown 报告已写入：{out}")
 
     if args.json_out:
@@ -442,6 +455,7 @@ def main() -> int:
                     "mode": "stub" if is_stub else "api",
                     "stub_mode": args.stub if is_stub else None,
                     "runs": args.runs,
+                    "provenance": provenance or None,
                     "rows": [r.to_dict() for r in rows],
                 },
                 ensure_ascii=False,

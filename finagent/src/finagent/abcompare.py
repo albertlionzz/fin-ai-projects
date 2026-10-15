@@ -162,6 +162,9 @@ def check_fidelity(
 
 # ---------------------------------------------------------------- 覆盖率
 
+# 汉字（CJK 统一表意文字）。用于"标题独有汉字"判定。
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
 
 @dataclass
 class CoverageReport:
@@ -184,20 +187,96 @@ class CoverageReport:
         }
 
 
-def check_coverage(text: str, findings: Sequence[Finding]) -> CoverageReport:
-    """一条 finding 算"被提及"的条件：标题出现，或规则编号出现。
+def _strip_ws(s: str) -> str:
+    """去掉全部空白。模型输出常把标题里的 "5 项" 写成 "5项"，
+    精确子串匹配不该败在一个空格上。"""
+    return re.sub(r"\s+", "", s or "")
 
-    刻意用宽判定：LLM 完全可能用同义改写而不照抄标题。
-    真正要抓的是**整条发现被跳过**——那才是漏报。
+
+def _title_chars(title: str) -> set[str]:
+    """标题里的汉字集合。
+
+    数字与标点不进：改写时数字通常会被保留（那是保真度检查的地盘），
+    被同义替换掉的恰是汉字。
     """
+    return set(_CJK_RE.findall(title or ""))
+
+
+def _finding_numbers(f: Finding) -> set[float]:
+    """单条 finding 自己的数字池：标题/依据正文 + evidence。
+
+    与 `number_pool` 的区别：不含计数类全局数字（发现总数、列表序号），
+    那些不属于任何一条发现，混进"独有数字"判定会互相污染。
+    """
+    pool: set[float] = set()
+    for text in (f.title, f.detail, f.basis or ""):
+        pool.update(extract_numbers(text or ""))
+    _collect_evidence_numbers(f.evidence, pool)
+    return pool
+
+
+def _is_weak_number(v: float) -> bool:
+    """区分度不足的数字，不进"独有数字"判定。两类：
+
+    - 年份（1900–2100 的整数）：每份财务输出都会带报告期，
+      命中它证明不了讨论过某条发现；
+    - 10 以下的整数：计数类（"3 项指标""连续 4 期""权重 2"），
+      行文里随处可见。本系统的指标值（百分比/比率/金额）总是小数
+      或大量级，不受这条影响。
+    """
+    if not float(v).is_integer():
+        return False
+    iv = int(v)
+    return 1900 <= iv <= 2100 or iv < 10
+
+
+def check_coverage(text: str, findings: Sequence[Finding]) -> CoverageReport:
+    """一条 finding 算"被提及"的条件（满足其一）：
+
+    1. 标题（忽略空白差异）出现在输出里——stub 与保守模型的路径；
+    2. 规则编号出现在输出里——模型回抄 ID 的路径；
+    3. 标题的**独有汉字** ≥80% 出现，或该发现的**独有指标数字**出现——
+       LLM 同义改写的路径。
+
+    第 3 条是接真实模型后才补的。初版只有精确标题匹配，而 docstring 写着
+    "LLM 完全可能用同义改写而不照抄标题"——实现与意图不符。stub 按构造
+    照抄标题所以恒 100%；真实模型一改写措辞就整条判漏：实测 qwen3:4b 对
+    示例制造 7 项发现的输出逐条覆盖了全部 7 项，旧指标报 0%。
+    覆盖率对这个指标的主要用户群恒为 0，等于没有这个指标。
+
+    为什么信"独有汉字/独有数字"：讨论一条发现，几乎不可能不碰它标题里
+    的汉字组合或它特有的指标值。跨标题共享的词（"营收""净利率"）与共享的
+    数字（营收增速 8.0% 同时出现在两条发现里）在去重阶段已被剔除，
+    剩下的才构成证据。80% 的阈值留给"同向恶化→恶化"这类个别字词丢失。
+    """
+    bare = _strip_ws(text)
+    char_sets = [_title_chars(f.title) for f in findings]
+    char_union = set().union(*char_sets) if char_sets else set()
+    num_pools = [_finding_numbers(f) for f in findings]
+    num_union = set().union(*num_pools) if num_pools else set()
+    text_nums = set(extract_numbers(text))
+
     missing: list[str] = []
     covered = 0
-    for f in findings:
-        title = (f.title or "").strip()
-        if (title and title in text) or (f.rule_id and f.rule_id in text):
+    for f, chars, nums in zip(findings, char_sets, num_pools):
+        title_bare = _strip_ws(f.title)
+        distinctive_chars = chars - (char_union - chars)
+        distinctive_nums = {
+            v for v in (nums - (num_union - nums)) if not _is_weak_number(v)
+        }
+        char_ratio = (
+            sum(1 for c in distinctive_chars if c in text) / len(distinctive_chars)
+            if len(distinctive_chars) >= 2 else 0.0
+        )
+        if (
+            (title_bare and title_bare in bare)
+            or (f.rule_id and f.rule_id in text)
+            or char_ratio >= 0.8
+            or bool(distinctive_nums & text_nums)
+        ):
             covered += 1
         else:
-            missing.append(f.rule_id or title)
+            missing.append(f.rule_id or (f.title or "").strip())
     return CoverageReport(total=len(findings), covered=covered, missing=missing)
 
 

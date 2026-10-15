@@ -1641,6 +1641,125 @@ class TestAbMetrics(unittest.TestCase):
         self.assertEqual(rep.score, 1.0, f"模板出现无依据数字：{rep.ungrounded}")
 
 
+# 本地 Ollama qwen3:4b-instruct-2507-q4_K_M 对示例制造场景的真实输出
+# （2026-10-16，temperature 0.1）。逐条覆盖了全部 7 项发现且数字全部有出处，
+# 但旧版覆盖率检查器（精确标题匹配）对它报 0%——它把标题
+# "应收账款增速显著快于营业收入" 改写成了 "应收账款增速远超营收"。
+# 这段输出因此固化为回归样本：改写措辞不得被判成漏报。
+_REAL_LLM_OUTPUT_07FINDINGS = """1. **应收账款增速远超营收**（+64.3% vs +8.0%）
+   成因：信用政策放宽，客户赊账激增。
+   核查：回款周期、客户信用评级、坏账计提。
+   影响：回款风险高，利润兑现能力存疑。
+
+2. **存货增速远超营收**（+60.0% vs +8.0%）
+   成因：产销量下滑或库存管理失当。
+   核查：存货结构、跌价准备、销售合同执行。
+   影响：存货减值风险上升，资产质量恶化。
+
+3. **经营现金流/净利润=0.38**
+   成因：利润含大量非现金收益或回款延迟。
+   核查：费用确认时点、应收款项回款情况。
+   影响：盈余质量弱，现金流支撑不足。
+
+4. **10科目波动超±50%**
+   成因：单笔大额交易或会计政策调整。
+   核查：原始凭证、费用归属、会计分录。
+   影响：数据可信度存疑，需逐项验证。
+
+5. **资产负债率73.33%**
+   成因：债务扩张，或资产结构偏重有息负债。
+   核查：债务结构、融资用途、偿债计划。
+   影响：财务杠杆高，再融资压力大。
+
+6. **商誉占净资产40.38%**
+   成因：并购标的估值偏高或业绩未达预期。
+   核查：并购对价、标的业绩承诺。
+   影响：减值风险集中，盈利稳定性受威胁。
+
+7. **净利率由8.20%降至5.83%**
+   成因：成本上升或销售费用扩张。
+   核查：成本结构、费用率变动。
+   影响：盈利改善乏力，扩张不可可持续。"""
+
+
+class TestCoverageParaphrase(unittest.TestCase):
+    """覆盖率的同义改写路径：真实模型不会照抄标题。
+
+    精确标题匹配对 stub 恒 100%（stub 按构造照抄），对真实模型恒 0——
+    这个指标的主要用户群恰好被它漏掉。修复后三条路径：
+    忽略空白的标题匹配 / 规则编号 / 独有汉字≥80% 或独有指标数字。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cur, prev = load_pair(
+            STMT_DIR / "示例制造_2025A.json", STMT_DIR / "示例制造_2024A.json"
+        )
+        cls.findings = Orchestrator().analyze(cur, prev).findings
+
+    def test_real_llm_output_is_fully_covered(self):
+        """回归样本：qwen3:4b 的真实输出逐条覆盖 7 项，指标必须认下来。"""
+        rep = check_coverage(_REAL_LLM_OUTPUT_07FINDINGS, self.findings)
+        self.assertEqual(rep.score, 1.0, f"被误判为漏报：{rep.missing}")
+
+    def test_dropped_synonym_and_space_still_covered(self):
+        """"5项…4期恶化" vs 标题 "5 项…4 期同向恶化"：空格与个别字词丢失算覆盖。"""
+        drift = Finding(
+            rule_id="QUALITY_DRIFT", level=Level.HIGH,
+            title="5 项盈利质量指标连续 4 期同向恶化",
+            detail="五项指标连续同向走坏。",
+            evidence={"score": 9.0, "periods": ["2022A", "2025A"]},
+        )
+        other = Finding(
+            rule_id="MARGIN_EROSION", level=Level.HIGH,
+            title="营业收入增长但净利率下滑", detail="净利率下滑。",
+        )
+        text = "异常2：5项盈利质量指标连续4期恶化，反映经营效率下降。"
+        rep = check_coverage(text, [drift, other])
+        self.assertNotIn("QUALITY_DRIFT", rep.missing)
+        self.assertIn("MARGIN_EROSION", rep.missing)
+
+    def test_distinctive_number_path(self):
+        """措辞整个改写、只留下指标数字时，独有数字命中也算覆盖。"""
+        ocf = Finding(
+            rule_id="OCF_DIVERGE", level=Level.WARN,
+            title="经营现金流与净利润背离",
+            detail="经营现金流/净利润 0.38 低于观察线 0.8。",
+            evidence={"ocf_ratio": 0.38, "line_warn": 0.8},
+        )
+        debt = Finding(
+            rule_id="DEBT_RATIO", level=Level.WARN,
+            title="资产负债率处于高位",
+            detail="资产负债率 73.33% 处于高位。",
+            evidence={"debt_ratio": 73.33, "line_warn": 70.0},
+        )
+        # 只复述数字、完全不用标题措辞
+        text = "现金利润转化率仅 0.38，杠杆水平 73.33%，均需关注。"
+        rep = check_coverage(text, [ocf, debt])
+        self.assertEqual(rep.score, 1.0, f"被误判为漏报：{rep.missing}")
+
+    def test_shared_words_do_not_cross_cover(self):
+        """共享词不构成证据："净利率下滑"不得覆盖"毛利率下滑"。"""
+        gm = Finding(rule_id="GM", level=Level.WARN, title="毛利率下滑",
+                     detail="毛利率由 29.0% 降至 26.0%。", evidence={"delta": -3.0})
+        nm = Finding(rule_id="NM", level=Level.WARN, title="净利率下滑",
+                     detail="净利率由 8.6% 降至 7.4%。", evidence={"delta": -1.2})
+        rep = check_coverage("净利率由 8.6% 降至 7.4%，盈利走弱。", [gm, nm])
+        self.assertIn("GM", rep.missing)
+        self.assertNotIn("NM", rep.missing)
+
+    def test_weak_numbers_do_not_count_as_evidence(self):
+        """年份与计数类小整数没有区分度，不能作为"提及过"的证据。"""
+        a = Finding(rule_id="A", level=Level.WARN, title="净利率下滑",
+                    detail="净利率由 8.20% 降至 5.83%。",
+                    evidence={"periods": ["2024A", "2025A"]})
+        b = Finding(rule_id="B", level=Level.WARN, title="盈利质量指标连续同向恶化",
+                    detail="多项指标连续同向走坏。", evidence={"score": 9.0})
+        text = "2025A 期间共连续 3 期观察，未见异常。"
+        rep = check_coverage(text, [a, b])
+        self.assertIn("B", rep.missing, "报告期与计数类'3'证明不了讨论过 B")
+
+
 def _load_fetch_module():
     """把 scripts/fetch_benchmarks.py 当模块加载。
 
