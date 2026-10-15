@@ -30,6 +30,34 @@ from .benchmarks import BenchmarkBook
 from .models import FinancialStatement, Finding, Level, StatementSeries
 
 
+# ---------------------------------------------------------------- 盈利质量指标表
+#
+# QUALITY_DRIFT（多项盈利质量指标连续同向恶化）的指标清单：名称、重要性权重、
+# 恶化方向、取值函数。放在 RuleBook 之前，因为 RuleBook 的默认权重表由它生成，
+# 配置校验也拿它当参照系。
+#
+# 权重排序的依据：
+#   毛利率       竞争地位与定价权的直接体现，盈利质量恶化的领先指标；
+#   净利率       盈利的最终结果，受毛利率驱动，另含费用与非经常项信息；
+#   经营现金流/净利润  利润的含金量（应计质量），"纸面利润"的照妖镜；
+#   资产负债率   偿债安全边际，与"盈利质量"相距较远；
+#   流动比率     短期偿付能力，同上，只作佐证不作主证。
+# 前两项度量盈利本身故权重最高，第三项检验盈利质量居次，后两项关乎偿债
+# 安全而非盈利质量，权重减半。
+#
+# 曾经的写法是 5 项等权计数（trend_min_agree：≥3 项同向即触发）。等权的
+# 隐含假设是"五项一样重要"——实测思维下这不成立："经营现金流+杠杆+流动性"
+# 三项齐坏，不该与"毛利率+净利率"两项齐坏判成同一严重度，后者是更强的信号。
+QUALITY_DRIFT_INDICATORS: tuple[tuple[str, float, int, Callable], ...] = (
+    # (指标名, 重要性权重, 恶化方向, 取值函数)；方向 -1 = 越小越坏，+1 = 越大越坏
+    ("毛利率", 3.0, -1, lambda s: s.gross_margin()),
+    ("净利率", 2.0, -1, lambda s: s.net_margin()),
+    ("经营现金流/净利润", 2.0, -1, lambda s: s.ocf_to_profit()),
+    ("资产负债率", 1.0, +1, lambda s: s.debt_ratio()),
+    ("流动比率", 1.0, -1, lambda s: s.current_ratio()),
+)
+
+
 # ---------------------------------------------------------------- 规则簿
 
 
@@ -82,8 +110,21 @@ class RuleBook:
     # 默认 2 与拆分前逐字等价（3 - 1 = 2）。
     persistence_min_pairs: int = 2
 
-    # 同向恶化判定：至少几项质量指标同步走坏才算结构性恶化。
-    trend_min_agree: int = 3
+    # 盈利质量同向恶化（QUALITY_DRIFT）：5 项指标的重要性权重表。
+    # 默认值见上方 QUALITY_DRIFT_INDICATORS 的排序说明。
+    # 与等权计数（旧 trend_min_agree）的差别：加权后"毛利率+净利率"两项齐坏
+    # （3+2=5）即触发，而"现金流+杠杆+流动性"三项齐坏（2+1+1=4）不触发。
+    quality_drift_weights: dict[str, float] = field(
+        default_factory=lambda: {n: w for n, w, _d, _g in QUALITY_DRIFT_INDICATORS}
+    )
+
+    # 加权得分门槛。默认 5 的含义：
+    #   最强两指标组合（毛利率 3 + 净利率 2）恰好达标——两个盈利维度连续同向
+    #   走坏即构成恶化通道，不需要弱指标凑数；
+    #   纯弱指标组合够不着——等权时代它们凑够 3 项就能触发，正是要纠正的方向。
+    # 与权重表配合保证"至少 2 项同向"：单项最高权重 3 < 5，
+    # 单项指标再重也不会单独触发（见规则内的结构性底线）。
+    quality_drift_min_score: float = 5.0
 
     def __post_init__(self) -> None:
         # 明显不合法的配置要当场炸，不能静默跑出没有意义的结果——
@@ -97,6 +138,25 @@ class RuleBook:
             raise ValueError(
                 f"persistence_min_pairs 至少为 1（看几对相邻期），"
                 f"收到 {self.persistence_min_pairs}"
+            )
+        # 权重表的键必须与指标表一一对应：少一个键意味着该指标被静默剔除，
+        # 多一个键意味着配置里躺着永远不生效的权重——两种都要当场炸。
+        expected = {n for n, _w, _d, _g in QUALITY_DRIFT_INDICATORS}
+        got = set(self.quality_drift_weights)
+        if got != expected:
+            raise ValueError(
+                f"quality_drift_weights 的键必须与指标表一致"
+                f"（缺 {sorted(expected - got)}，多 {sorted(got - expected)}）"
+            )
+        if any(w <= 0 for w in self.quality_drift_weights.values()):
+            raise ValueError(
+                f"quality_drift_weights 的权重必须为正数，"
+                f"收到 {self.quality_drift_weights}"
+            )
+        if self.quality_drift_min_score <= 0:
+            raise ValueError(
+                f"quality_drift_min_score 必须为正数，"
+                f"收到 {self.quality_drift_min_score}"
             )
 
 
@@ -658,28 +718,36 @@ def escalate_persistent_findings(
 def rule_quality_deterioration(
     series: StatementSeries, rb: RuleBook
 ) -> Finding | None:
-    """多项盈利质量指标连续同向恶化。
+    """多项盈利质量指标连续同向恶化（按重要性加权判定）。
 
     与持续性升级互补：上面那条管"已触阈值的信号是否持续"，
     这条管"没触阈值但一直在缓慢变坏"的情况。
     毛利率每年降 1pct，单期看都够不上观察线，但连续四年就是明确的恶化通道——
     这种"温水煮青蛙"式的问题恰恰是单期分析最容易漏掉的。
+
+    加权而非等权：5 项指标的重要性不同（见 QUALITY_DRIFT_INDICATORS）。
+    等权计数时代，"经营现金流+杠杆+流动性"三项齐坏与"毛利率+净利率"两项
+    齐坏同严重度；按权重后前者得分 4 不触发、后者得分 5 触发。
+
+    结构性底线（不是可调参数）：至少 2 项指标同向才判定。单项指标再重也
+    不算"多项同向"——单一毛利率连降四年可能是定价策略调整等正常经营行为，
+    跨指标 corroboration 才是这条规则的存在理由。
     """
     if not series.has_trend(rb.trend_min_periods):
         return None
 
     sts = series.statements
-    # (指标名, 取值函数, 恶化方向)  direction=-1 表示越小越坏
-    indicators: list[tuple[str, callable, int]] = [
-        ("毛利率", lambda s: s.gross_margin(), -1),
-        ("净利率", lambda s: s.net_margin(), -1),
-        ("经营现金流/净利润", lambda s: s.ocf_to_profit(), -1),
-        ("资产负债率", lambda s: s.debt_ratio(), +1),
-        ("流动比率", lambda s: s.current_ratio(), -1),
-    ]
+    weights = rb.quality_drift_weights
+    # 按配置的权重降序迭代：披露时最重要的指标排最前，且不依赖传入字典的顺序。
+    # 权重并列时回退到指标表次序（即默认重要性排序），不用字符串排序——
+    # 并列时谁前谁后应当是设计意图，不是 Unicode 码点。
+    table_order = {name: i for i, (name, _w, _d, _g) in enumerate(QUALITY_DRIFT_INDICATORS)}
+    ordered = sorted(
+        QUALITY_DRIFT_INDICATORS, key=lambda t: (-weights[t[0]], table_order[t[0]])
+    )
 
-    worsening: list[str] = []
-    for name, getter, direction in indicators:
+    worsening: list[tuple[str, float]] = []
+    for name, _default_weight, direction, getter in ordered:
         vals = [getter(s) for s in sts]
         if any(v is None for v in vals):
             continue
@@ -688,23 +756,32 @@ def rule_quality_deterioration(
         # 持平既不是改善也不是恶化，报出来就是误报。
         deltas = [(vals[i + 1] - vals[i]) * direction for i in range(len(vals) - 1)]
         if all(d > 0 for d in deltas):
-            worsening.append(name)
+            worsening.append((name, weights[name]))
 
-    if len(worsening) < rb.trend_min_agree:
+    score = sum(w for _name, w in worsening)
+    if len(worsening) < 2 or score < rb.quality_drift_min_score:
         return None
 
-    listed = "、".join(worsening)
+    listed = "、".join(f"{name}（权重 {w:g}）" for name, w in worsening)
     return Finding(
         rule_id="QUALITY_DRIFT",
         level=Level.HIGH,
         title=f"{len(worsening)} 项盈利质量指标连续 {len(sts)} 期同向恶化",
         detail=(
             f"{listed} 在 {sts[0].period}→{sts[-1].period} 期间持续走坏，"
-            f"每一期都朝同一方向变动。单项看可能均未触及时值观察线，"
+            f"每一期都朝同一方向变动；按重要性加权得分 {score:g}"
+            f"（门槛 {rb.quality_drift_min_score:g}）。"
+            f"单项看可能均未触及时值观察线，"
             f"但连续同向变动已构成明确的恶化通道，属于结构性问题。"
         ),
         items=["revenue", "net_profit", "operating_cash_flow"],
-        evidence={"worsening": worsening, "periods": series.periods},
+        evidence={
+            "worsening": [name for name, _w in worsening],
+            "weights": {name: w for name, w in worsening},
+            "score": score,
+            "min_score": rb.quality_drift_min_score,
+            "periods": series.periods,
+        },
         basis=(
             "单期阈值法会系统性漏掉'每期小幅恶化'型问题；"
             "多指标同向连续变动是识别慢性恶化的补充维度"

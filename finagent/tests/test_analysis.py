@@ -47,6 +47,7 @@ from finagent.abcompare import (  # noqa: E402
 from finagent.benchmarks import BenchmarkBook, IndustryBenchmark  # noqa: E402
 from finagent.models import DEFAULT_POLICY, ScorePolicy  # noqa: E402
 from finagent.rules import (  # noqa: E402
+    QUALITY_DRIFT_INDICATORS,
     RuleBook,
     RuleEngine,
     rule_balance_sheet_identity,
@@ -680,8 +681,146 @@ class TestQualityDrift(unittest.TestCase):
         ]
         s = build_series(paths)
         out = RuleEngine().run(s.latest, s.previous, series=s)
-        self.assertTrue(any(f.rule_id == "QUALITY_DRIFT" for f in out),
-                        "长恒电子应触发同向恶化")
+        drift = [f for f in out if f.rule_id == "QUALITY_DRIFT"]
+        self.assertTrue(drift, "长恒电子应触发同向恶化")
+        self.assertEqual(drift[0].evidence["score"], 9.0,
+                         "五项全坏得分应为 3+2+2+1+1=9")
+
+
+class TestQualityDriftWeights(unittest.TestCase):
+    """重要性权重：等权计数的隐含假设"五项一样重要"不成立。
+
+    等权时代（trend_min_agree=3）两类组合被判成同一严重度：
+      A. 毛利率 + 净利率齐坏        —— 两个盈利维度同向走坏，强信号，却不触发（才 2 项）
+      B. 现金流 + 杠杆 + 流动性齐坏  —— 三个弱指标凑数，触发
+    加权后 A 得分 5 触发、B 得分 4 不触发。下面每条测试钉一个侧面。
+    """
+
+    # 四期健康基座：毛利率 29%、净利率 8.6%、OCF/净利 1.14、负债率 50%、流动比率 1.73
+    BASE = dict(revenue=100000.0, cost_of_sales=71000.0, net_profit=8600.0,
+                operating_cash_flow=9800.0, total_liabilities=75000.0,
+                total_assets=150000.0, current_assets=78000.0,
+                current_liabilities=45000.0)
+
+    def _series(self, *changes: dict) -> StatementSeries:
+        """四期序列：首期用 BASE，之后每期叠加 changes 里的科目覆盖。"""
+        specs = [("2022A", dict(self.BASE))]
+        for i, ch in enumerate(changes):
+            specs.append((f"202{3 + i}A", {**self.BASE, **ch}))
+        return mk_series(*specs)
+
+    def _drift(self, s: StatementSeries):
+        out = RuleEngine().run(s.latest, s.previous, series=s)
+        return [f for f in out if f.rule_id == "QUALITY_DRIFT"]
+
+    def test_strong_pair_fires_weak_triple_does_not(self):
+        """核心行为：毛利率+净利率（5 分）触发；现金流+杠杆+流动性（4 分）不触发。"""
+        # 毛利率、净利率逐年走坏，其余三项持平或改善
+        strong = self._series(
+            {"cost_of_sales": 72000.0, "net_profit": 8200.0},
+            {"cost_of_sales": 73000.0, "net_profit": 7800.0},
+            {"cost_of_sales": 74000.0, "net_profit": 7400.0},
+        )
+        drift = self._drift(strong)
+        self.assertEqual(len(drift), 1, "两个盈利维度齐坏应触发")
+        self.assertEqual(drift[0].evidence["score"], 5.0)
+        self.assertEqual(drift[0].evidence["worsening"], ["毛利率", "净利率"])
+        self.assertEqual(drift[0].evidence["weights"], {"毛利率": 3.0, "净利率": 2.0})
+        self.assertIn("门槛 5", drift[0].detail)
+        self.assertIn("权重", drift[0].detail)
+
+        # 净利率、负债率、流动比率逐年走坏，毛利率与 OCF/净利改善或持平
+        weak = self._series(
+            {"net_profit": 8200.0, "total_liabilities": 77000.0,
+             "current_assets": 77000.0, "current_liabilities": 46000.0},
+            {"net_profit": 7800.0, "total_liabilities": 79000.0,
+             "current_assets": 75500.0, "current_liabilities": 47500.0},
+            {"net_profit": 7400.0, "total_liabilities": 81000.0,
+             "current_assets": 74000.0, "current_liabilities": 49000.0},
+        )
+        self.assertFalse(self._drift(weak),
+                         "三项弱指标凑数（4 分）不得触发——等权时代会误触发")
+
+    def test_single_indicator_never_fires_regardless_of_weight(self):
+        """结构性底线：单项指标再重也不算"多项同向"。
+
+        只坏毛利率（权重 3，最高）：可能是定价策略调整等单一因素，
+        跨指标 corroboration 才是这条规则的存在理由。
+        """
+        only_gm = self._series(
+            {"cost_of_sales": 72000.0},
+            {"cost_of_sales": 73000.0},
+            {"cost_of_sales": 74000.0},
+        )
+        self.assertFalse(self._drift(only_gm), "单项毛利率连降不得触发")
+
+    def test_equal_weights_reproduce_old_counting(self):
+        """把权重全部设 1、门槛设 3，行为回到等权计数时代。
+
+        证明新参数化是旧行为的超集：不是只能加权，而是可以配出等权。
+        """
+        rb = RuleBook(
+            quality_drift_weights={n: 1.0 for n, _w, _d, _g in QUALITY_DRIFT_INDICATORS},
+            quality_drift_min_score=3.0,
+        )
+        weak = self._series(
+            {"net_profit": 8200.0, "total_liabilities": 77000.0,
+             "current_assets": 77000.0, "current_liabilities": 46000.0},
+            {"net_profit": 7800.0, "total_liabilities": 79000.0,
+             "current_assets": 75500.0, "current_liabilities": 47500.0},
+            {"net_profit": 7400.0, "total_liabilities": 81000.0,
+             "current_assets": 74000.0, "current_liabilities": 49000.0},
+        )
+        out = RuleEngine(book=rb).run(weak.latest, weak.previous, series=weak)
+        drift = [f for f in out if f.rule_id == "QUALITY_DRIFT"]
+        self.assertEqual(len(drift), 1, "等权 3/5 时三项弱指标应触发（旧行为）")
+        self.assertEqual(drift[0].evidence["score"], 3.0)
+
+    def test_custom_weights_reorder_disclosure(self):
+        """自定义权重后，披露顺序跟随权重降序，不跟随指标表顺序。"""
+        rb = RuleBook(
+            quality_drift_weights={
+                "毛利率": 1.0, "净利率": 1.0, "经营现金流/净利润": 3.0,
+                "资产负债率": 1.0, "流动比率": 1.0,
+            },
+            quality_drift_min_score=4.0,
+        )
+        # OCF/净利 + 负债率 + 流动比率齐坏：等权下才 3 分，自定义后 3+1+1=5 分
+        s = self._series(
+            {"operating_cash_flow": 8400.0, "total_liabilities": 77000.0,
+             "current_assets": 77000.0, "current_liabilities": 46000.0},
+            {"operating_cash_flow": 6800.0, "total_liabilities": 79000.0,
+             "current_assets": 75500.0, "current_liabilities": 47500.0},
+            {"operating_cash_flow": 5100.0, "total_liabilities": 81000.0,
+             "current_assets": 74000.0, "current_liabilities": 49000.0},
+        )
+        out = RuleEngine(book=rb).run(s.latest, s.previous, series=s)
+        drift = [f for f in out if f.rule_id == "QUALITY_DRIFT"]
+        self.assertEqual(len(drift), 1)
+        self.assertEqual(drift[0].evidence["worsening"],
+                         ["经营现金流/净利润", "资产负债率", "流动比率"],
+                         "披露顺序应按权重降序")
+
+    def test_default_weights_follow_documented_ranking(self):
+        """默认权重表即文档承诺的重要性排序。"""
+        self.assertEqual(
+            list(RuleBook().quality_drift_weights),
+            ["毛利率", "净利率", "经营现金流/净利润", "资产负债率", "流动比率"],
+        )
+        self.assertEqual(RuleBook().quality_drift_min_score, 5.0)
+
+    def test_invalid_weight_config_raises(self):
+        """键对不上、权重非正、门槛非正都要当场炸。"""
+        full = {n: 1.0 for n, _w, _d, _g in QUALITY_DRIFT_INDICATORS}
+        with self.assertRaises(ValueError):      # 少一个键
+            RuleBook(quality_drift_weights={k: v for k, v in full.items()
+                                            if k != "毛利率"})
+        with self.assertRaises(ValueError):      # 多一个键
+            RuleBook(quality_drift_weights={**full, "商誉/净资产": 1.0})
+        with self.assertRaises(ValueError):      # 零权重
+            RuleBook(quality_drift_weights={**full, "毛利率": 0.0})
+        with self.assertRaises(ValueError):      # 负门槛
+            RuleBook(quality_drift_min_score=-1.0)
 
 
 class TestSeriesIntegration(unittest.TestCase):
