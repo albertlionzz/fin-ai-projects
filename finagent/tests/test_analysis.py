@@ -1050,8 +1050,13 @@ class TestBenchmarkedRules(unittest.TestCase):
         f2 = rule_receivable_growth_gap(cur, prev, RB, benchmarks=self.book)
         self.assertIsNone(f2, "建筑施工 p75=26pct，gap 25pct 属于行业常态，不该报")
 
-    def test_high_line_scales_with_calibrated_warn(self):
-        """重大线只按比例推导，不跟着行业样本漂移。"""
+    def test_high_line_comes_from_industry_p90(self):
+        """重大线取行业 p90，不再按 abs_high/abs_warn 比例拍倍数。
+
+        食品饮料实测 ar_growth_gap 的 p90 = 73.3，而比例线只有 47.3——
+        按比例线会把行业尾部 10% 的公司判成"只到关注级"。
+        工程机械 fixture：p50=6 / p75=12 / p90=20。
+        """
         cur = mk(
             "2025A",
             accounts_receivable=2000.0, revenue=1000.0,
@@ -1066,10 +1071,99 @@ class TestBenchmarkedRules(unittest.TestCase):
         )
         cur.meta["industry"] = "工程机械"
         f = rule_receivable_growth_gap(cur, prev, RB, benchmarks=self.book)
-        self.assertEqual(f.level, Level.HIGH)
-        # 绝对线 20/40，比例 2；校准后 12 → 24
+        self.assertEqual(f.level, Level.HIGH)          # gap 100% 远超 p90=20
         self.assertEqual(f.evidence["line_warn"], 12.0)
-        self.assertEqual(f.evidence["line_high"], 24.0)
+        self.assertEqual(f.evidence["line_high"], 20.0)
+        self.assertEqual(f.evidence["line_source"], "industry:p75")
+        self.assertEqual(f.evidence["line_high_source"], "industry:p90")
+        self.assertEqual(f.evidence["industry_p50"], 6.0)
+        self.assertEqual(f.evidence["industry_p90"], 20.0)
+
+    def test_warn_band_is_p75_to_p90(self):
+        """[p75, p90) 区间是关注级：比四分之三的同行极端，但没进最差十分之一。"""
+        cur = mk(
+            "2025A",
+            accounts_receivable=1160.0, revenue=1000.0,   # gap = 16pct
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        prev = mk(
+            "2024A",
+            accounts_receivable=1000.0, revenue=1000.0,
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        cur.meta["industry"] = "工程机械"
+        f = rule_receivable_growth_gap(cur, prev, RB, benchmarks=self.book)
+        self.assertIsNotNone(f)
+        self.assertEqual(f.level, Level.WARN, "16pct 在 p75=12 与 p90=20 之间")
+        self.assertIn("中位 6.0", f.detail, "区间描述要把中位数一起给读者")
+        self.assertIn("p90 20.0", f.detail)
+
+    def test_high_line_falls_back_to_ratio_without_p90(self):
+        """老簿子只有 p75 时，重大线退回比例推导，行为可预期。"""
+        import json
+        import tempfile
+
+        thin = {
+            "schema": "finagent-industry-benchmarks/1",
+            "min_peers": 5,
+            "industries": {
+                "工程机械": {"n_peers": 42, "metrics": {"ar_growth_gap": {"p75": 12.0}}},
+            },
+        }
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", delete=False, encoding="utf-8"
+        ) as fh:
+            json.dump(thin, fh, ensure_ascii=False)
+            tmp = fh.name
+        try:
+            book = load_benchmarks(tmp)
+            cur = mk(
+                "2025A",
+                accounts_receivable=2000.0, revenue=1000.0,
+                inventory=200.0, total_assets=2000.0,
+                total_liabilities=400.0, total_equity=1600.0,
+            )
+            prev = mk(
+                "2024A",
+                accounts_receivable=1000.0, revenue=1000.0,
+                inventory=200.0, total_assets=2000.0,
+                total_liabilities=400.0, total_equity=1600.0,
+            )
+            cur.meta["industry"] = "工程机械"
+            f = rule_receivable_growth_gap(cur, prev, RB, benchmarks=book)
+            self.assertEqual(f.evidence["line_warn"], 12.0)
+            self.assertEqual(f.evidence["line_high"], 24.0, "比例线 = 12 × (40/20)")
+            self.assertEqual(f.evidence["line_high_source"], "industry:p75x2.00")
+            self.assertIsNone(f.evidence["industry_p50"])
+            self.assertIsNone(f.evidence["industry_p90"])
+            self.assertIn("p75 12.0", f.detail, "缺的分位不写，不补默认值")
+            self.assertNotIn("中位", f.detail)
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+
+    def test_absolute_lines_have_no_band(self):
+        """没校准上时 evidence 里不出现行业区间，来源全是 absolute。"""
+        cur = mk(
+            "2025A",
+            accounts_receivable=1250.0, revenue=1000.0,
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        prev = mk(
+            "2024A",
+            accounts_receivable=1000.0, revenue=1000.0,
+            inventory=200.0, total_assets=2000.0,
+            total_liabilities=400.0, total_equity=1600.0,
+        )
+        cur.meta["industry"] = "航天军工"          # 不在簿里
+        f = rule_receivable_growth_gap(cur, prev, RB, benchmarks=self.book)
+        self.assertEqual(f.evidence["line_source"], "absolute")
+        self.assertEqual(f.evidence["line_high_source"], "absolute")
+        self.assertEqual(f.evidence["line_high"], 40.0)
+        self.assertIsNone(f.evidence["industry_p50"])
+        self.assertNotIn("分位校准", f.detail)
 
 
 # ---------------------------------------------------------------- 评分参数层
@@ -1513,6 +1607,74 @@ class TestBenchmarkFeed(unittest.TestCase):
                 self.fb.fetch_statement("600600", "2025AR", True, raw, 0.0)["OPERATE_INCOME"],
                 "324.73 亿",
             )
+
+    # --- 网络层健壮性 ---
+
+    def test_incomplete_read_is_not_oserror(self):
+        """钉住 2026-10 电子抓取崩溃的根因：IncompleteRead 的继承链是
+        IncompleteRead → HTTPException → Exception，与 OSError 无关，
+        `except (URLError, OSError)` 结构上接不住它。"""
+        import http.client
+
+        exc = http.client.IncompleteRead(b"7645 bytes read")
+        self.assertIsInstance(exc, http.client.HTTPException)
+        self.assertNotIsInstance(exc, OSError)
+
+    def test_http_get_retries_incomplete_read(self):
+        """站点偶发断流必须走重试，不能一次打挂整轮抓取。
+
+        电子行业 1940 次请求约 95 分钟，曾因第 71 秒一次 IncompleteRead 全废。
+        """
+        import http.client
+        import tempfile
+        from unittest import mock
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"<html>ok</html>"
+
+        state = {"n": 0}
+
+        def flaky(url, timeout=None):
+            state["n"] += 1
+            if state["n"] < 3:
+                raise http.client.IncompleteRead(b"7645 bytes read")
+            return FakeResp()
+
+        with tempfile.TemporaryDirectory() as td:
+            cache = Path(td) / "sub" / "x.html"
+            with mock.patch.object(self.fb.urllib.request, "urlopen", side_effect=flaky), \
+                 mock.patch.object(self.fb.time, "sleep"):
+                body = self.fb.http_get("https://x.test/", cache, 0.0, retries=3)
+            self.assertEqual(body, "<html>ok</html>")
+            self.assertEqual(state["n"], 3)
+            self.assertTrue(cache.exists())
+
+    def test_http_get_gives_up_cleanly_after_retries(self):
+        """重试耗尽要抛带上下文的 RuntimeError，不写缓存也不写 404 标记。"""
+        import http.client
+        import tempfile
+        from unittest import mock
+
+        def dead(url, timeout=None):
+            raise http.client.IncompleteRead(b"7645 bytes read")
+
+        with tempfile.TemporaryDirectory() as td:
+            cache = Path(td) / "x.html"
+            with mock.patch.object(self.fb.urllib.request, "urlopen", side_effect=dead), \
+                 mock.patch.object(self.fb.time, "sleep"):
+                with self.assertRaises(RuntimeError) as ctx:
+                    self.fb.http_get("https://x.test/", cache, 0.0, retries=3)
+            self.assertIn("x.test", str(ctx.exception))
+            self.assertIn("IncompleteRead", str(ctx.exception))
+            self.assertFalse(cache.exists())
+            self.assertFalse(Path(str(cache) + ".404").exists())
 
 
 class TestFixtureBridge(unittest.TestCase):

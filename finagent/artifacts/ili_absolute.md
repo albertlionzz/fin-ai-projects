@@ -35,7 +35,7 @@
 
 | Agent | 动作 | 耗时 | 状态 | 说明 |
 |---|---|---|---|---|
-| `audit` | `rule_engine` | 0.0ms | 成功 | 10 条规则 → 0 项发现（重大 0 / 关注 0） |
+| `audit` | `rule_engine` | 0.1ms | 成功 | 10 条规则 → 0 项发现（重大 0 / 关注 0） |
 | `report` | `template_reasoning` | — | 成功 | 未接 LLM，使用确定性聚合模板 |
 
 ---

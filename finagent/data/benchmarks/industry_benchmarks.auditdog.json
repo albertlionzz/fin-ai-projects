@@ -1,6 +1,6 @@
 {
   "schema": "finagent-industry-benchmarks/1",
-  "source": "auditdog.cn 三大报表 Beta（站点自上市公司公开年报 AI 抽取），2025AR/2024AR，抓取于 2026-10-15；非审计数据，仅作行业参照系，不作为审计证据。",
+  "source": "auditdog.cn 三大报表 Beta（站点自上市公司公开年报 AI 抽取），2025AR/2024AR；非审计数据，仅作行业参照系，不作为审计证据。按行业分次累加，各行业抓取日期见该行业块内的 as_of。",
   "as_of": "2026-10-15",
   "min_peers": 5,
   "metric_definitions": {
@@ -14,6 +14,7 @@
   "industries": {
     "食品饮料": {
       "n_peers": 103,
+      "as_of": "2026-10-15",
       "metrics": {
         "ar_growth_gap": {
           "p50": -2.53,

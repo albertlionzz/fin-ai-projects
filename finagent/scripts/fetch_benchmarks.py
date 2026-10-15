@@ -55,6 +55,7 @@ bbs.auditdog.cn（陈版主实务问答检索）的三大报表 Beta，数据由
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import re
 import sys
@@ -225,7 +226,15 @@ def http_get(url: str, cache: Path, delay: float, retries: int = 3) -> str | Non
                     time.sleep(delay)
                 return None
             last_err = exc
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            OSError,
+            http.client.HTTPException,
+        ) as exc:
+            # HTTPException 不是 OSError 子类：站点偶发断流时 `resp.read()` 抛
+            # `http.client.IncompleteRead`（继承链 IncompleteRead → HTTPException
+            # → Exception），曾整轮 95 分钟的电子抓取在第 71 秒被它一次断流打挂。
             last_err = exc
         time.sleep(2.0 * (attempt + 1))
     raise RuntimeError(f"请求失败（重试 {retries} 次后放弃）：{url} -> {last_err}")
@@ -473,20 +482,35 @@ def crawl_industry(
 
 
 def build_book(
-    per_industry: dict[str, list[dict]], min_peers: int
+    per_industry: dict[str, list[dict]],
+    min_peers: int,
+    existing: dict | None = None,
 ) -> tuple[dict, dict]:
-    """汇总成基准簿 JSON + 构建报告。"""
+    """汇总成基准簿 JSON + 构建报告。
+
+    existing 是同一条 --out 路径上已有的簿。**必须合并而不是覆盖**：
+    基准簿按行业累加，跑一个行业就冲掉上一个行业的数据是不可接受的损失
+    （电子 485 家的抓取成本是 95 分钟，被一次误覆盖全废）。
+    合并规则：本次抓到的行业整体替换，未抓到的行业原样保留，
+    每个行业块带自己的 as_of，读者能看出哪批数据是旧的。
+    """
+    today = date.today().isoformat()
+    industries: dict[str, dict] = {}
+    if existing:
+        prev = existing.get("industries") or {}
+        if isinstance(prev, dict):
+            industries.update(prev)      # 先保留旧行业，下面再覆盖本次的
     book: dict = {
         "schema": "finagent-industry-benchmarks/1",
         "source": (
             "auditdog.cn 三大报表 Beta（站点自上市公司公开年报 AI 抽取），"
-            f"2025AR/2024AR，抓取于 {date.today().isoformat()}；"
-            "非审计数据，仅作行业参照系，不作为审计证据。"
+            "2025AR/2024AR；非审计数据，仅作行业参照系，不作为审计证据。"
+            "按行业分次累加，各行业抓取日期见该行业块内的 as_of。"
         ),
-        "as_of": date.today().isoformat(),
+        "as_of": today,
         "min_peers": min_peers,
         "metric_definitions": METRIC_DEFINITIONS,
-        "industries": {},
+        "industries": industries,
     }
     report: dict = {"industries": {}}
     for industry, results in per_industry.items():
@@ -513,7 +537,11 @@ def build_book(
             block[m] = {f"p{q}": round(percentile(vals, q), 2) for q in QUANTILES}
         if not block:
             continue
-        book["industries"][industry] = {"n_peers": min(ns), "metrics": block}
+        industries[industry] = {
+            "n_peers": min(ns),
+            "as_of": today,
+            "metrics": block,
+        }
         report["industries"][industry] = {"metrics": detail}
     return book, report
 
@@ -602,16 +630,38 @@ def main(argv: list[str] | None = None) -> int:
               f"交叉校验告警 {len(stats['flagged_checks'])} 家"
               f"（累计 {done}/{total}，耗时 {time.time() - t0:.0f}s）")
 
-    # 4) 汇总
-    book, detail = build_book(per_industry, args.min_peers)
-    for ind, det in detail["industries"].items():
-        report_industries[ind]["metrics"] = det["metrics"]
-
+    # 4) 汇总（与已有簿合并，不覆盖未重抓的行业）
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict | None = None
+    if out_path.exists():
+        try:
+            existing = json.loads(out_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            existing = None      # 读不出来就当没有，重新生成好过崩掉
+    if existing:
+        kept = [i for i in (existing.get("industries") or {}) if i not in industries]
+        if kept:
+            print(f"[合并] 保留未重抓的行业：{kept}")
+    book, detail = build_book(per_industry, args.min_peers, existing)
+    for ind, det in detail["industries"].items():
+        report_industries[ind]["metrics"] = det["metrics"]
     out_path.write_text(
         json.dumps(book, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    # 报告同样合并：未重抓行业的明细原样保留
+    report_path = Path(args.report)
+    prev_report: dict = {}
+    if report_path.exists():
+        try:
+            prev_report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            prev_report = {}
+    prev_inds = prev_report.get("industries") or {}
+    if isinstance(prev_inds, dict):
+        for ind, body in prev_inds.items():
+            if ind not in report_industries and isinstance(body, dict):
+                report_industries[ind] = body
     report = {
         "generated_at": date.today().isoformat(),
         "params": {
@@ -623,11 +673,11 @@ def main(argv: list[str] | None = None) -> int:
             "min_peers": args.min_peers,
         },
         "summary": {
-            "industries": len(industries),
+            "industries_in_book": len(book["industries"]),
             "companies_in_book": sum(
                 b["n_peers"] for b in book["industries"].values()
             ),
-            "requests": total,
+            "requests_this_run": total,
         },
         "industries": report_industries,
     }

@@ -284,7 +284,8 @@ def main() -> int:
         default=None,
         metavar="JSON",
         help="行业基准簿路径。传入后，AR_GAP / INV_GAP / GM_SWING / DEBT_RATIO "
-             "的观察线改为同行业 p75 分位；报表 meta.industry 缺失或行业不在表里时"
+             "的关注线改为同行业 p75 分位、重大线取 p90 分位（p90 缺失时重大线"
+             "按原有比例推导）；报表 meta.industry 缺失或行业不在表里时"
              "自动回退绝对线，并在 Finding.evidence.line_source 中记录来源",
     )
     a.add_argument("--company", default=None, help="主体名称（缺省取报表 meta）")

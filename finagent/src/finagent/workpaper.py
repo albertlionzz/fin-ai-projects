@@ -280,8 +280,9 @@ def build_working_paper(
                 scope_=f"行业 {result.metrics.get('benchmarks', {}).get('industry', '—')}",
                 method="分析程序（同行业分位数比对）",
                 result=(
-                    f"{len(calibrated)} 项发现的观察线按行业 p75 分位校准，"
-                    "校准后阈值已在发现区逐条披露。"
+                    f"{len(calibrated)} 项发现的观察线按行业分位校准"
+                    "（关注线取 p75、重大线取 p90，缺失时退回比例推导），"
+                    "校准后阈值与同行区间已在发现区逐条披露。"
                 ),
                 marks=["●"],
             )

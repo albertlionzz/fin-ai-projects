@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from .benchmarks import BenchmarkBook
 from .models import FinancialStatement, Finding, Level, StatementSeries
@@ -95,6 +95,28 @@ def _benchmark_aware(fn):
     return fn
 
 
+@dataclass(frozen=True)
+class CalibratedLine:
+    """一次行业校准的结果。
+
+    `warn_src == "absolute"` 时表示没校准上（无簿 / 行业不在表里 /
+    样本量不足 / 该指标没有分位数），此时 warn/high 就是绝对线原值，
+    note 为空——四条规则据此保证"没基准时行为逐字不变"。
+    """
+
+    warn: float
+    high: float
+    warn_src: str                 # "absolute" | "industry:p75"
+    high_src: str                 # "absolute" | "industry:p90" | "industry:p75x2.00"
+    note: str = ""                # 同行区间描述，拼进 detail；绝对线下为空
+    p50: float | None = None      # 行业中位数（机器可读）
+    p90: float | None = None      # 行业 p90（机器可读）
+
+    @property
+    def calibrated(self) -> bool:
+        return self.warn_src != "absolute"
+
+
 def _industry_line(
     bm: BenchmarkBook | None,
     cur: FinancialStatement,
@@ -102,41 +124,84 @@ def _industry_line(
     abs_warn: float,
     abs_high: float,
     q: str = "p75",
-) -> tuple[float, float, str]:
-    """按行业校准观察线，返回 (关注线, 重大线, 来源)。
+) -> CalibratedLine:
+    """按行业分位校准观察线，返回关注线 / 重大线及其来源。
 
-    三条规则，缺一不可：
+    四条规则，缺一不可：
 
     1. **无基准簿 / 行业不在表里 / 样本量不足 → 原样返回绝对线**。
        这是向后兼容底线：不传 benchmarks 时，所有规则行为与改造前逐字一致。
-    2. **只校准基准线（关注线），重大线按原有倍数推导**。
-       "关注/重大"的比例关系是判定策略（需要解释 vs 需要专项核查），
-       不该跟着行业样本漂移——否则同一个剪刀差在不同行业会跨档。
-    3. **必须返回来源**。调用方要把它写进 evidence.line_source。
+
+    2. **关注线取 p75，重大线取 p90，两端都 grounded 在同行分布上**。
+       p75 = "比四分之三的同行更极端，需要解释"（关注级）；
+       p90 = "行业最差十分之一，需要专项核查"（重大级）。
+       早年重大线按 `abs_high / abs_warn` 的比例推导，那是拍倍数不是看分布：
+       食品饮料 ar_growth_gap 实测 p90 = 73.3，而比例线只有 47.3——
+       按比例线会把行业尾部 10% 的公司判成"只到关注级"。
+       p90 缺失时（老簿子只存了 p75）退回比例推导，行为可预期。
+
+    3. **必须分别披露两条线的来源**。warn_src / high_src 写进 evidence，
        财务工具不能悄悄换阈值：读者看到"观察线 12pct"时，
-       必须能回答"这个 12 是哪来的"。
+       必须能回答"这个 12 是哪来的、重大线 20 又是哪来的"。
+
+    4. **必须把整条区间给读者，不能只给一根线**。单说"超过 p75"会被读成
+       "绝对偏高"，而按定义任一行约 25% 的公司落在 p75 之上——
+       行业中位数才是"常态"的锚点。note 里带上 p50 / p75 / p90，
+       读者能自己定位公司处于哪个区间，而不是只剩一个孤零零的阈值。
     """
     industry = cur.meta.get("industry")
     if bm is None or not industry:
-        return float(abs_warn), float(abs_high), "absolute"
-    line, src = bm.line(industry, metric, abs_warn, q)
-    if src == "absolute":
-        return float(abs_warn), float(abs_high), "absolute"
-    ratio = (abs_high / abs_warn) if abs_warn else 2.0
-    return line, line * ratio, src
+        return CalibratedLine(float(abs_warn), float(abs_high), "absolute", "absolute")
+    warn, warn_src = bm.line(industry, metric, abs_warn, q)
+    if warn_src == "absolute":
+        return CalibratedLine(float(abs_warn), float(abs_high), "absolute", "absolute")
+
+    b = bm.get(industry, metric)
+    p50 = b.at("p50") if b is not None else None
+    p90 = b.at("p90") if b is not None else None
+    if p90 is None:
+        ratio = (abs_high / abs_warn) if abs_warn else 2.0
+        high, high_src = warn * ratio, f"industry:{q}x{ratio:.2f}"
+    else:
+        high, high_src = p90, "industry:p90"
+    return CalibratedLine(
+        warn=warn,
+        high=high,
+        warn_src=warn_src,
+        high_src=high_src,
+        note=_band_note(industry, p50, warn, p90),
+        p50=p50,
+        p90=p90,
+    )
 
 
-def _line_note(industry: str | None, src: str) -> str:
-    """观察线来源的人类可读附注，拼进 detail 让读者看见校准发生了。
+def _band_note(
+    industry: str | None, p50: float | None, p75: float, p90: float | None
+) -> str:
+    """同行分布的区间描述。缺哪个分位就不写哪个，不补默认值。"""
+    parts = []
+    if p50 is not None:
+        parts.append(f"中位 {p50:.1f}")
+    parts.append(f"p75 {p75:.1f}")
+    if p90 is not None:
+        parts.append(f"p90 {p90:.1f}")
+    return f"；已按{industry}行业分位校准（{'，'.join(parts)}）"
 
-    注意 src 同时是 evidence.line_source 的机器可读值（"industry:p75"），
-    这里要做一层翻译——底稿和 JSON 消费方要精确值，报告读者要看得懂，
-    两种表示各取所需，但不能把 "industry:p75" 直接扔进中文正文。
+
+def _line_evidence(line: CalibratedLine) -> dict[str, Any]:
+    """四条规则共用的 evidence 片段：阈值、两条线的来源、行业区间。
+
+    单独抽出来是因为这四个字段必须在每条规则里逐字一致——
+    复核人要能跨规则比较"这条的 p90 和那条的 p90 是不是同一本簿子"。
     """
-    if src == "absolute":
-        return ""
-    q = src.split(":", 1)[1] if ":" in src else src
-    return f"；已按{industry}行业 {q} 分位校准"
+    return {
+        "line_warn": round(line.warn, 2),
+        "line_high": round(line.high, 2),
+        "line_source": line.warn_src,
+        "line_high_source": line.high_src,
+        "industry_p50": None if line.p50 is None else round(line.p50, 2),
+        "industry_p90": None if line.p90 is None else round(line.p90, 2),
+    }
 
 
 # ---------------------------------------------------------------- 规则实现
@@ -165,21 +230,21 @@ def rule_receivable_growth_gap(
     if g_recv is None or g_rev is None:
         return None
     gap = g_recv - g_rev
-    warn, high, src = _industry_line(
+    line = _industry_line(
         bm=benchmarks, cur=cur, metric="ar_growth_gap",
         abs_warn=rb.receivable_gap_warn, abs_high=rb.receivable_gap_high,
     )
+    warn, high = line.warn, line.high
     if gap < warn:
         return None
     level = Level.HIGH if gap >= high else Level.WARN
-    industry = cur.meta.get("industry")
     return Finding(
         rule_id="AR_GAP",
         level=level,
         title="应收账款增速显著快于营业收入",
         detail=(
             f"应收账款同比 {g_recv:+.1f}%，营业收入同比 {g_rev:+.1f}%，"
-            f"剪刀差 {gap:.1f} 个百分点（观察线 {warn:.0f}pct{_line_note(industry, src)}）。"
+            f"剪刀差 {gap:.1f} 个百分点（观察线 {warn:.0f}pct{line.note}）。"
             f"收入可能依赖放宽信用政策实现，回款质量存疑。"
         ),
         items=["accounts_receivable", "revenue"],
@@ -187,9 +252,7 @@ def rule_receivable_growth_gap(
             "receivable_yoy": round(g_recv, 2),
             "revenue_yoy": round(g_rev, 2),
             "gap_pct": round(gap, 2),
-            "line_warn": round(warn, 2),
-            "line_high": round(high, 2),
-            "line_source": src,
+            **_line_evidence(line),
         },
         basis="应收增速与营收增速的剪刀差是收入质量恶化的经典先行指标",
     )
@@ -212,21 +275,21 @@ def rule_inventory_growth_gap(
     if g_inv is None or g_rev is None:
         return None
     gap = g_inv - g_rev
-    warn, high, src = _industry_line(
+    line = _industry_line(
         bm=benchmarks, cur=cur, metric="inv_growth_gap",
         abs_warn=rb.inventory_gap_warn, abs_high=rb.inventory_gap_high,
     )
+    warn, high = line.warn, line.high
     if gap < warn:
         return None
     level = Level.HIGH if gap >= high else Level.WARN
-    industry = cur.meta.get("industry")
     return Finding(
         rule_id="INV_GAP",
         level=level,
         title="存货增速显著快于营业收入",
         detail=(
             f"存货同比 {g_inv:+.1f}%，营业收入同比 {g_rev:+.1f}%，剪刀差 {gap:.1f} 个百分点"
-            f"（观察线 {warn:.0f}pct{_line_note(industry, src)}）。"
+            f"（观察线 {warn:.0f}pct{line.note}）。"
             f"存在存货积压或跌价准备计提不充分的风险。"
         ),
         items=["inventory", "revenue"],
@@ -234,9 +297,7 @@ def rule_inventory_growth_gap(
             "inventory_yoy": round(g_inv, 2),
             "revenue_yoy": round(g_rev, 2),
             "gap_pct": round(gap, 2),
-            "line_warn": round(warn, 2),
-            "line_high": round(high, 2),
-            "line_source": src,
+            **_line_evidence(line),
         },
         basis="存货增速持续高于营收增速通常指向滞销或减值计提不足",
     )
@@ -258,31 +319,29 @@ def rule_gross_margin_swing(
     if gm_cur is None or gm_prev is None:
         return None
     delta = gm_cur - gm_prev
-    warn, high, src = _industry_line(
+    line = _industry_line(
         bm=benchmarks, cur=cur, metric="gross_margin_delta",
         abs_warn=rb.gross_margin_warn, abs_high=rb.gross_margin_high,
     )
+    warn, high = line.warn, line.high
     if abs(delta) < warn:
         return None
     level = Level.HIGH if abs(delta) >= high else Level.WARN
     direction = "上升" if delta > 0 else "下降"
-    industry = cur.meta.get("industry")
     return Finding(
         rule_id="GM_SWING",
         level=level,
         title=f"毛利率同比大幅{direction}",
         detail=(
             f"毛利率由 {gm_prev:.2f}% 变为 {gm_cur:.2f}%，变动 {delta:+.2f} 个百分点"
-            f"（观察线 ±{warn:.0f}pct{_line_note(industry, src)}）。需核实成本结转或产品结构是否发生变化。"
+            f"（观察线 ±{warn:.0f}pct{line.note}）。需核实成本结转或产品结构是否发生变化。"
         ),
         items=["revenue", "cost_of_sales"],
         evidence={
             "gross_margin_prev": round(gm_prev, 2),
             "gross_margin_cur": round(gm_cur, 2),
             "delta_pct": round(delta, 2),
-            "line_warn": round(warn, 2),
-            "line_high": round(high, 2),
-            "line_source": src,
+            **_line_evidence(line),
         },
         basis="毛利率异常波动需与产品结构、原材料价格、成本结转口径变化相互印证",
     )
@@ -327,10 +386,11 @@ def rule_debt_ratio(
     dr = cur.debt_ratio()
     if dr is None:
         return None
-    warn, high, src = _industry_line(
+    line = _industry_line(
         bm=benchmarks, cur=cur, metric="debt_ratio",
         abs_warn=rb.debt_ratio_warn, abs_high=rb.debt_ratio_high,
     )
+    warn, high = line.warn, line.high
     if dr < warn:
         return None
     level = Level.HIGH if dr >= high else Level.WARN
@@ -338,22 +398,19 @@ def rule_debt_ratio(
     trend = ""
     if prev_dr is not None:
         trend = f"，上年同期 {prev_dr:.2f}%（{dr - prev_dr:+.2f}pct）"
-    industry = cur.meta.get("industry")
     return Finding(
         rule_id="DEBT_RATIO",
         level=level,
         title="资产负债率处于高位",
         detail=(
-            f"资产负债率 {dr:.2f}%（观察线 {warn:.0f}%{_line_note(industry, src)}）{trend}。"
+            f"资产负债率 {dr:.2f}%（观察线 {warn:.0f}%{line.note}）{trend}。"
             f"偿债压力与再融资能力需一并评估。"
         ),
         items=["total_liabilities", "total_assets"],
         evidence={
             "debt_ratio": round(dr, 2),
             "prev_debt_ratio": round(prev_dr, 2) if prev_dr is not None else None,
-            "line_warn": round(warn, 2),
-            "line_high": round(high, 2),
-            "line_source": src,
+            **_line_evidence(line),
         },
         basis="资产负债率是杠杆水平与偿债风险的基础度量",
     )

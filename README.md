@@ -47,7 +47,7 @@ finrag/
 | 解决的问题 | 从两期或多期财务数字里**发现异常**并说明依据 |
 | 核心产物 | 带回溯依据的异常清单 + 风险分与等级 + 审计底稿 |
 | 评测方式 | 规则召回率 / 误报率 / 可复算性 / 研判质量四维指标 |
-| 实测 | 植入 7 类异常全命中，152 个测试通过；4 期趋势模式可识别单期阈值法漏掉的慢性恶化；行业校准可双向调整灵敏度；35 组参数里 24 组不翻档；行业基准已从 auditdog.cn 真实抓取（食品饮料 111 家），44 家公司判定因校准改变 |
+| 实测 | 植入 7 类异常全命中，158 个测试通过；4 期趋势模式可识别单期阈值法漏掉的慢性恶化；行业校准可双向调整灵敏度；35 组参数里 24 组不翻档；行业基准已从 auditdog.cn 真实抓取（食品饮料 111 家），44 家公司判定因校准改变；重大线从"拍倍数"改为行业 p90 后 22 处判定翻转（11:11 对称，证明比例线与分布形状无关） |
 
 **核心立场：确定性优先，LLM 只在最后一环介入。**
 
@@ -58,7 +58,7 @@ finrag/
 finagent/
 ├── src/finagent/
 │   ├── models.py      财务指标 / 多期序列 / 风险分（饱和函数）/ 等级映射 / ScorePolicy
-│   ├── rules.py       RuleBook 集中阈值 + 10 条规则 + 持续性升级 + 行业校准 + RuleEngine
+│   ├── rules.py       RuleBook 集中阈值 + 10 条规则 + 持续性升级 + 行业区间校准（p75 关注 / p90 重大）+ RuleEngine
 │   ├── benchmarks.py  行业基准簿（分位数查询 + 同行样本量门槛）
 │   ├── workpaper.py   审计底稿（Markdown 永远可用；xlsx 需 openpyxl）
 │   ├── abcompare.py   研判质量四维指标（保真 / 覆盖 / 复述 / 可复算）
@@ -70,7 +70,7 @@ finagent/
 │   ├── fetch_benchmarks.py      从 auditdog.cn 抓三大报表，构建真实行业基准簿
 │   ├── build_fixture_from_raw.py 把爬虫缓存还原成 finagent statement JSON
 │   └── ab_test.py     研判质量 A/B（--stub 框架自检 / --api 真实模型）
-└── tests/test_analysis.py   152 个单元测试
+└── tests/test_analysis.py   158 个单元测试
 ```
 
 四项能力递进，每一项都解决上一项暴露的问题：
