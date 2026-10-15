@@ -554,7 +554,11 @@ class Orchestrator:
             metrics["series"] = {
                 "periods": series.periods,
                 "n_periods": len(series),
-                "trend_enabled": series.has_trend(3),
+                # 用引擎实际的启用门槛，不写字面量 3——否则改了 RuleBook
+                # 这里会撒谎，渲染层与底稿层正是读这个字段决定要不要展示趋势区
+                "trend_enabled": series.has_trend(
+                    self.audit.engine.book.trend_min_periods
+                ),
             }
         # 行业校准的覆盖情况。记录"哪些发现用了校准线"而非只记一个布尔值——
         # 复核人要能逐条核对阈值来源，这正是"阈值必须可披露"的落地。

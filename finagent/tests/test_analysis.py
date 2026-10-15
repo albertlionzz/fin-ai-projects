@@ -530,6 +530,86 @@ class TestPersistentEscalation(unittest.TestCase):
         self.assertTrue(all("重复出现" not in f.detail for f in out))
 
 
+class TestPersistencePairsSplit(unittest.TestCase):
+    """trend_min_periods 与 persistence_min_pairs 的拆分。
+
+    拆分前一个参数承载两个语义：n_pairs = trend_min_periods - 1。
+    想把持续性判定收紧到 3 对（"连续三年"），就不得不把启用门槛抬到
+    4 期——副作用是 3 期数据的公司连趋势规则都跑不上了。
+    """
+
+    def _persistent(self) -> StatementSeries:
+        return mk_series(
+            ("2022A", {"revenue": 100000.0, "accounts_receivable": 19000.0,
+                       "inventory": 14000.0, "cost_of_sales": 71000.0}),
+            ("2023A", {"revenue": 104000.0, "accounts_receivable": 24000.0,
+                       "inventory": 16000.0, "cost_of_sales": 74900.0}),
+            ("2024A", {"revenue": 108000.0, "accounts_receivable": 30000.0,
+                       "inventory": 18500.0, "cost_of_sales": 79200.0}),
+            ("2025A", {"revenue": 112000.0, "accounts_receivable": 37500.0,
+                       "inventory": 21500.0, "cost_of_sales": 84000.0}),
+        )
+
+    def test_default_is_behavior_preserving(self):
+        """默认 2 与拆分前逐字等价（旧式 trend_min_periods - 1 = 2）。"""
+        self.assertEqual(RuleBook().trend_min_periods, 3)
+        self.assertEqual(RuleBook().persistence_min_pairs, 2)
+
+    def test_stricter_persistence_does_not_raise_enable_gate(self):
+        """核心性质：收紧持续性判定，3 期公司照样跑趋势规则。
+
+        旧写法做不到这一点——trend_min_periods=4 会把启用门槛一起抬到 4 期。
+        """
+        three = mk_series(
+            ("2023A", {"revenue": 100000.0, "accounts_receivable": 19000.0,
+                       "inventory": 14000.0, "cost_of_sales": 71000.0}),
+            ("2024A", {"revenue": 104000.0, "accounts_receivable": 24000.0,
+                       "inventory": 16000.0, "cost_of_sales": 74900.0}),
+            ("2025A", {"revenue": 108000.0, "accounts_receivable": 30000.0,
+                       "inventory": 18500.0, "cost_of_sales": 79200.0}),
+        )
+        rb = RuleBook(persistence_min_pairs=3)
+        self.assertEqual(rb.trend_min_periods, 3, "启用门槛没被连带抬高")
+        out = RuleEngine(book=rb).run(three.latest, three.previous, series=three)
+        ar = [f for f in out if f.rule_id == "AR_GAP"]
+        self.assertTrue(ar, "3 期照样跑规则并触发 AR_GAP")
+        self.assertNotIn("重复出现", ar[0].detail,
+                         "凑不齐 3 对，不得升级")
+
+    def test_three_pairs_still_escalates(self):
+        """4 期有 3 对且全部触发时，3 对门槛下仍应升级。"""
+        s = self._persistent()
+        out = RuleEngine(book=RuleBook(persistence_min_pairs=3)).run(
+            s.latest, s.previous, series=s
+        )
+        ar = [f for f in out if f.rule_id == "AR_GAP"][0]
+        self.assertEqual(ar.level, Level.HIGH)
+
+    def test_invalid_config_raises(self):
+        """明显非法的配置当场炸，不静默跑出没有意义的结果。"""
+        with self.assertRaises(ValueError):
+            RuleBook(trend_min_periods=1)
+        with self.assertRaises(ValueError):
+            RuleBook(persistence_min_pairs=0)
+
+    def test_render_follows_metrics_not_series_shape(self):
+        """渲染层读 metrics.trend_enabled，不自己拿 series 重算门槛。
+
+        改了 RuleBook 让趋势没跑起来时，控制台不得显示"趋势区间"——
+        显示层只反映事实，不重新定义事实。
+        """
+        from finagent.models import AnalysisResult
+
+        s = self._persistent()
+        result = AnalysisResult(
+            company="测试", period="2025A",
+            metrics={"series": {"periods": s.periods, "n_periods": 4,
+                                "trend_enabled": False}},
+        )
+        out = render_console(result, series=s)
+        self.assertNotIn("趋势区间", out, "引擎没跑趋势，控制台不许显示趋势区间")
+
+
 class TestQualityDrift(unittest.TestCase):
     """同向恶化：捕捉单期够不上观察线、但一直在变坏的问题。"""
 

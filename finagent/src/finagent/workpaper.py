@@ -221,7 +221,13 @@ def build_working_paper(
     - 行业校准生效了 → 记一条程序说明阈值来源，并在索引里指向基准数据文件
     """
     today = date.today().isoformat()
-    trend_on = series is not None and series.has_trend(3)
+    # 与渲染层同源：趋势程序记不记，看引擎实际跑没跑，不看字面量 3。
+    # 底稿是证据——把没执行过的程序写成执行过，比漏记更严重。
+    trend_on = (
+        series is not None
+        and isinstance(result.metrics.get("series"), dict)
+        and bool(result.metrics["series"].get("trend_enabled", False))
+    )
 
     procedures: list[Procedure] = [
         Procedure(

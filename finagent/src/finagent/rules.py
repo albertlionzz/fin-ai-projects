@@ -69,12 +69,35 @@ class RuleBook:
     line_item_swing_warn: float = 50.0
     line_item_swing_high: float = 100.0
 
-    # 多期趋势：信号需连续出现多少期才升级严重度。
+    # 多期趋势：信号需连续出现多少期才启用趋势规则。
     # 3 是下限——2 期只能做同比，谈不上"趋势"。
     trend_min_periods: int = 3
 
+    # 持续性升级：最近几个相邻期配对**全部**触发才算"持续"。
+    # 与 trend_min_periods 拆开的理由：前者是"数据够不够做趋势分析"的门槛，
+    # 后者是"多高的复发才算结构性问题"的判定标准，两者没有必然联系。
+    # 曾经的写法是 n_pairs = trend_min_periods - 1，即一个参数承载两个语义——
+    # 想放宽持续性判定（比如"连续三年"要 3 对）就不得不连带把启用门槛
+    # 从 3 期抬到 4 期，而后者会让只有 3 期数据的公司连趋势规则都跑不上。
+    # 默认 2 与拆分前逐字等价（3 - 1 = 2）。
+    persistence_min_pairs: int = 2
+
     # 同向恶化判定：至少几项质量指标同步走坏才算结构性恶化。
     trend_min_agree: int = 3
+
+    def __post_init__(self) -> None:
+        # 明显不合法的配置要当场炸，不能静默跑出没有意义的结果——
+        # 与 parse_amount 认不出格式就 raise 是同一条纪律。
+        if self.trend_min_periods < 2:
+            raise ValueError(
+                f"trend_min_periods 至少为 2（两期才能做一次同比），"
+                f"收到 {self.trend_min_periods}"
+            )
+        if self.persistence_min_pairs < 1:
+            raise ValueError(
+                f"persistence_min_pairs 至少为 1（看几对相邻期），"
+                f"收到 {self.persistence_min_pairs}"
+            )
 
 
 # ---------------------------------------------------------------- 行业校准辅助
@@ -583,8 +606,13 @@ def escalate_persistent_findings(
     新增会导致同一个问题在报告里出现两次，风险分也会被重复计算，
     读者看到的是"4 项异常"实际只有 2 个问题。
 
-    判定标准：某条规则在最近 trend_min_periods-1 个相邻期配对上**全部**触发。
+    判定标准：某条规则在最近 `persistence_min_pairs` 个相邻期配对上**全部**触发。
     "连续"而非"累计"——中间断一期说明情况有变化，不能算持续。
+
+    `persistence_min_pairs` 与 `trend_min_periods` 是两个独立的参数：
+    前者管"复发几次算持续"（判定标准），后者管"几期数据才配做趋势分析"
+    （启用门槛）。拆分前两者绑死（n_pairs = trend_min_periods - 1），
+    想把持续性判定放宽到 3 对就不得不把启用门槛抬到 4 期。
 
     benchmarks 必须与主引擎用的是同一本：持续性判定要重跑历史配对，
     若这里用绝对线而主引擎用了行业校准线，两边的触发集不一致，
@@ -593,7 +621,7 @@ def escalate_persistent_findings(
     if not series.has_trend(rb.trend_min_periods):
         return findings
 
-    n_pairs = rb.trend_min_periods - 1
+    n_pairs = rb.persistence_min_pairs
     recent = series.trailing_pairs(n_pairs)
     if len(recent) < n_pairs:
         return findings

@@ -21,6 +21,21 @@ def _fmt_ratio(v: float | None, suffix: str = "%") -> str:
 # ---------------------------------------------------------------- 控制台
 
 
+def _trend_enabled(result: AnalysisResult) -> bool:
+    """这次分析到底有没有跑趋势规则。
+
+    读 `metrics["series"]["trend_enabled"]` 而不是自己拿 series 重算
+    `has_trend(3)`：启用门槛在 RuleBook 上可调（`trend_min_periods`），
+    渲染层各写一个字面量 3 就会在改了配置之后悄悄说谎——控制台显示
+    "趋势区间"而引擎根本没跑趋势规则，底稿更是会把没执行过的程序
+    写成执行过。显示层只反映事实，不重新定义事实。
+    """
+    series_meta = result.metrics.get("series")
+    if not isinstance(series_meta, dict):
+        return False
+    return bool(series_meta.get("trend_enabled", False))
+
+
 def render_console(
     result: AnalysisResult, series: StatementSeries | None = None
 ) -> str:
@@ -29,7 +44,7 @@ def render_console(
     bar = "=" * 62
     lines.append(bar)
     lines.append(f" {result.company} · {result.period}")
-    if series is not None and series.has_trend(3):
+    if _trend_enabled(result) and series is not None:
         lines.append(f" 趋势区间：{' → '.join(series.periods)}（{len(series)} 期）")
     lines.append(bar)
     lines.append(f" 风险分 {result.risk_score():.1f}/100 [{result.risk_grade()}]    "
@@ -76,7 +91,7 @@ def render_markdown(
     md: list[str] = []
     md.append(f"# {result.company} · 财务报表异常分析")
     md.append("")
-    trend_on = series is not None and series.has_trend(3)
+    trend_on = _trend_enabled(result) and series is not None
     if trend_on:
         md.append(f"> 报告期：**{result.period}**　｜　趋势区间：**{' → '.join(series.periods)}**"
                   f"（{len(series)} 期）")
