@@ -1895,6 +1895,22 @@ class TestBenchmarkFeed(unittest.TestCase):
         for n in ("贵州茅台", "东鹏饮料", "宁德时代"):
             self.assertFalse(self.fb.is_st(n))
 
+    def test_excluded_st_codes_from_universe(self):
+        """ST 排除名单必须从枚举全量算。crawl_industry 收到的是过滤后清单，
+        在它内部统计会恒得到 []——"默认排除 ST"将在构建报告里无据可查
+        （2026-10-16 实测：电子、食品饮料两个行业的 excluded_st 都是 []，
+        而实际分别排除了 10 家与 11 家）。"""
+        universe = [
+            {"code": "600519", "name": "贵州茅台"},
+            {"code": "600530", "name": "*ST西发"},
+            {"code": "000752", "name": "ST绝味"},
+        ]
+        self.assertEqual(
+            self.fb.excluded_st_codes(universe, include_st=False),
+            ["600530", "000752"],
+        )
+        self.assertEqual(self.fb.excluded_st_codes(universe, include_st=True), [])
+
     # --- 现金流量表通道 ---
 
     def test_extract_all_rows_returns_rows_outside_bs_is(self):

@@ -395,6 +395,19 @@ def is_st(name: str) -> bool:
     return "ST" in name.upper()
 
 
+def excluded_st_codes(companies: list[dict], include_st: bool) -> list[str]:
+    """枚举阶段被 ST 过滤挡在爬取之外的公司代码。
+
+    必须在枚举全量上算：crawl_industry 收到的是过滤后的清单，
+    它自己统计的 excluded_st 恒为空——"默认排除 ST"这件事会在构建报告里
+    无据可查（2026-10-16 修复：此前两个行业的 excluded_st 都是 []，
+    而电子实际排除了 10 家、食品饮料 11 家）。
+    """
+    if include_st:
+        return []
+    return [c["code"] for c in companies if is_st(c["name"])]
+
+
 # ---------------------------------------------------------------- 主流程
 
 
@@ -424,7 +437,6 @@ def crawl_industry(
     results: list[dict] = []
     stats = {
         "enumerated": len(companies),
-        "excluded_st": [c["code"] for c in companies if is_st(c["name"])],
         "crawled": 0,
         "missing_statements": [],
         "parse_errors": [],
@@ -620,7 +632,10 @@ def main(argv: list[str] | None = None) -> int:
             ind, comps, args.cur, args.prev, raw_dir, args.delay
         )
         per_industry[ind] = results
-        report_industries[ind] = {**stats, "companies": {
+        # ST 排除发生在进入 crawl_industry 之前，排除名单必须回到枚举全量算，
+        # 并用纯函数 excluded_st_codes() 计算（有单测钉住 include_st 两条路径）
+        report_industries[ind] = {**stats, "excluded_st":
+            excluded_st_codes(universe[ind], args.include_st), "companies": {
             c["code"]: c for c in results
         }}
         done += len(comps)
