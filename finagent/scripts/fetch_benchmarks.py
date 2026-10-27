@@ -89,7 +89,7 @@ SW_L1 = (
 )
 
 BS_ROWS = {"TOTAL_ASSETS", "TOTAL_LIABILITIES", "ACCOUNTS_RECE", "INVENTORY"}
-IS_ROWS = {"OPERATE_INCOME", "OPERATE_COST"}
+IS_ROWS = {"OPERATE_INCOME", "OPERATE_COST", "TOTAL_OPERATE_INCOME"}
 
 METRICS = ("ar_growth_gap", "inv_growth_gap", "debt_ratio", "gross_margin_delta")
 QUANTILES = (50, 75, 90, 95)
@@ -375,12 +375,18 @@ def cross_check(cells: list[str], bs_cur, is_cur) -> dict[str, float]:
 
     /data 的营收列对应营业总收入、总资产列对应资产总计；两边都来自同一份
     年报的不同抽取路径，偏差超过 1% 说明某一路解析错了。
+
+    营收必须同口径对比：/data 概览列是营业总收入，报表侧也要取
+    TOTAL_OPERATE_INCOME 而不能取 OPERATE_INCOME（营业收入）。两家口径在
+    有金融业务的公司本就不同——指南针营业总收入 21.46 亿 vs 营业收入
+    15.39 亿（差 28%），新大陆差 4%，茅台差 1.9%（财务公司利息收入计入
+    营业总收入、不计入营业收入）。混口径会让这类公司全部误报"解析错误"。
     """
     checks: dict[str, float] = {}
     try:
         dp_rev = parse_amount(cells[0]) if len(cells) > 0 else None
         dp_ta = parse_amount(cells[2]) if len(cells) > 2 else None
-        st_rev = row_value(is_cur, "OPERATE_INCOME")
+        st_rev = row_value(is_cur, "TOTAL_OPERATE_INCOME")
         st_ta = row_value(bs_cur, "TOTAL_ASSETS")
     except ValueError:
         return checks

@@ -1911,6 +1911,30 @@ class TestBenchmarkFeed(unittest.TestCase):
         )
         self.assertEqual(self.fb.excluded_st_codes(universe, include_st=True), [])
 
+    def test_cross_check_revenue_uses_total_operate_income(self):
+        """交叉校验的营收必须同口径：/data 概览列是营业总收入，报表侧也要取
+        TOTAL_OPERATE_INCOME。有金融业务的公司营业总收入 ≠ 营业收入
+        （指南针 21.46 vs 15.39 亿，差 28%），混口径会让这类公司全部误报
+        "解析错误"——2026-10-26 实测三行业 3 家 flagged 全是这个原因
+        （茅台 1.9% / 新大陆 4.1% / 指南针 28.3%），没有一家真解析错。"""
+        # /data 概览列：营业总收入 21.46 亿、总资产 30 亿
+        cells = ["21.46 亿", "5.00 亿", "30.00 亿", "10.00 亿", "20%"]
+        is_cur = {"OPERATE_INCOME": "15.39 亿", "TOTAL_OPERATE_INCOME": "21.46 亿"}
+        bs_cur = {"TOTAL_ASSETS": "30.00 亿"}
+        checks = self.fb.cross_check(cells, bs_cur, is_cur)
+        # 同口径对比：两处营业总收入一致，不误报
+        self.assertAlmostEqual(checks["revenue"], 0.0, places=9)
+        self.assertAlmostEqual(checks["total_assets"], 0.0, places=9)
+
+    def test_cross_check_still_flags_real_parse_errors(self):
+        """同口径后校验不能失效：营业总收入真对不上时必须照旧告警。"""
+        cells = ["21.46 亿", "5.00 亿", "30.00 亿", "10.00 亿", "20%"]
+        is_cur = {"OPERATE_INCOME": "15.39 亿", "TOTAL_OPERATE_INCOME": "19.00 亿"}
+        bs_cur = {"TOTAL_ASSETS": "28.00 亿"}
+        checks = self.fb.cross_check(cells, bs_cur, is_cur)
+        self.assertGreater(checks["revenue"], 0.01)
+        self.assertGreater(checks["total_assets"], 0.01)
+
     # --- 现金流量表通道 ---
 
     def test_extract_all_rows_returns_rows_outside_bs_is(self):
