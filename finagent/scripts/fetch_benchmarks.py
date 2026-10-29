@@ -301,12 +301,21 @@ def fetch_statement(
     raw_dir: Path,
     delay: float,
     kind: str | None = None,
+    wanted: set[str] | None = None,
 ) -> dict[str, str] | None:
     """抓一张报表页并抽行。返回 None 表示该期间没有数据（404）。
 
     kind 默认由 income 推导（bs/is）。显式传 "cf" 抓现金流量表，
     供 build_fixture_from_raw.py 补经营现金流科目用——基准分位数不算
     现金流，所以主爬虫不抓，省掉 50% 的请求。
+
+    wanted 让调用方指定要抽哪些行 ID，默认用本模块的窄集合（只够算四个
+    基准指标）。不传会造成隐蔽失效：build_fixture_from_raw 首次补抓某期
+    时，拿回的是按 BS_ROWS/IS_ROWS 抽的残缺字典（缺净利润、流动资产、
+    流动负债），于是判「科目不齐」跳过——而磁盘缓存其实已经写好了完整
+    HTML，第二次运行走缓存路径又正常。2026-10-29 电子行业权重量化首跑
+    30 家全部跳过的根因就是这个（食品饮料那次侥幸没暴露：2023AR 缓存
+    早在被 SIGTERM 杀掉的前一轮就抓好了）。
     """
     k = kind or ("is" if income else "bs")
     if k == "cf":
@@ -322,7 +331,7 @@ def fetch_statement(
         return None
     if k == "cf":
         return extract_all_rows(html)
-    return extract_rows(html, IS_ROWS if k == "is" else BS_ROWS)
+    return extract_rows(html, wanted or (IS_ROWS if k == "is" else BS_ROWS))
 
 
 # ---------------------------------------------------------------- 指标计算

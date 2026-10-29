@@ -75,7 +75,9 @@ def _load(code: str, period: str, kind: str, fetch_missing: bool = False) -> dic
     if not path.exists():
         if not fetch_missing:
             return {}
-        rows = fb.fetch_statement(code, period, False, RAW_DIR, 1.0, kind=kind)
+        rows = fb.fetch_statement(
+            code, period, False, RAW_DIR, 1.0, kind=kind, wanted=set(WANTED_ROWS)
+        )
         return rows or {}
     buf = path.read_text(encoding="utf-8", errors="replace")
     if kind == "cf":

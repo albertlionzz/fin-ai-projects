@@ -1935,6 +1935,37 @@ class TestBenchmarkFeed(unittest.TestCase):
         self.assertGreater(checks["revenue"], 0.01)
         self.assertGreater(checks["total_assets"], 0.01)
 
+    def test_fetch_statement_respects_wanted_rows(self):
+        """fetch_statement 必须尊重调用方指定的行集合。
+
+        build_fixture_from_raw 要 7 个核心科目，而爬虫的 BS_ROWS 只有 4 个、
+        IS_ROWS 里没有净利润。默认走窄集合时，首次补抓某期会返回残缺字典
+        （缺净利润/流动资产/流动负债），调用方只看到"科目不齐，跳过"——
+        而磁盘缓存其实已写好完整 HTML，第二次运行走缓存路径又正常。
+        故障因此伪装成数据问题：2026-10-29 电子行业权重量化首跑 30 家
+        全部跳过的根因就是这个。
+        """
+        from unittest import mock
+
+        html = (
+            '<li id="row-TOTAL_ASSETS"><span class="tabular-nums">100 亿</span></li>'
+            '<li id="row-TOTAL_CURRENT_ASSETS">'
+            '<span class="tabular-nums">60 亿</span></li>'
+            '<li id="row-NETPROFIT"><span class="tabular-nums">8 亿</span></li>'
+        )
+        wanted = {"TOTAL_ASSETS", "TOTAL_CURRENT_ASSETS", "NETPROFIT"}
+        with mock.patch.object(self.fb, "http_get", return_value=html):
+            narrow = self.fb.fetch_statement(
+                "000001", "2023AR", False, Path("."), 0, kind="bs"
+            )
+            wide = self.fb.fetch_statement(
+                "000001", "2023AR", False, Path("."), 0, kind="bs", wanted=wanted
+            )
+        # 窄集合只抽到 BS_ROWS 里那一个
+        self.assertEqual(set(narrow), {"TOTAL_ASSETS"})
+        # wanted 生效：三个全抽到
+        self.assertEqual(set(wide), wanted)
+
     # --- 现金流量表通道 ---
 
     def test_extract_all_rows_returns_rows_outside_bs_is(self):
