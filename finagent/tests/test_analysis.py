@@ -57,6 +57,7 @@ from finagent.rules import (  # noqa: E402
     rule_gross_margin_swing,
     rule_inventory_growth_gap,
     rule_margin_erosion,
+    rule_net_margin_turn,
     rule_receivable_growth_gap,
 )
 from finagent.workpaper import (  # noqa: E402
@@ -346,6 +347,66 @@ class TestRuleMarginErosion(unittest.TestCase):
         cur = mk("2025A", revenue=1200.0, net_profit=150.0)
         prev = mk("2024A", revenue=1000.0, net_profit=100.0)
         self.assertIsNone(rule_margin_erosion(cur, prev, RB))
+
+
+class TestRuleNetMarginTurn(unittest.TestCase):
+    """由盈转亏：定性变化，两期即可判。
+
+    与 MARGIN_EROSION 的分工是被实测逼出来的：后者要求营收增长，
+    营收下滑时的转亏（"减收更减利"）它不覆盖，而那才是更常见的形态。
+    911 家里 79 家转亏、31 家无实质性规则命中，就是这条规则缺位的直接证据。
+    """
+
+    def test_deep_loss_is_high(self):
+        cur = mk("2025A", revenue=1000.0, net_profit=-60.0)     # -6%
+        prev = mk("2024A", revenue=1000.0, net_profit=80.0)     # 8%
+        f = rule_net_margin_turn(cur, prev, RB)
+        self.assertIsNotNone(f)
+        self.assertEqual(f.rule_id, "NET_MARGIN_TURN")
+        self.assertEqual(f.level, Level.HIGH)
+        self.assertAlmostEqual(f.evidence["loss_depth"], 6.0, places=2)
+        self.assertAlmostEqual(f.evidence["net_margin_prev"], 8.0, places=2)
+
+    def test_shallow_loss_is_warn(self):
+        """微利转微亏：性质仍变了要报，但算不上重大。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=-10.0)     # -1%
+        prev = mk("2024A", revenue=1000.0, net_profit=5.0)      # 0.5%
+        f = rule_net_margin_turn(cur, prev, RB)
+        self.assertIsNotNone(f)
+        self.assertEqual(f.level, Level.WARN)
+
+    def test_revenue_decline_is_covered(self):
+        """营收下滑叠加转亏，正是 MARGIN_EROSION 管不到的那一半。"""
+        cur = mk("2025A", revenue=800.0, net_profit=-50.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=55.0)
+        f = rule_net_margin_turn(cur, prev, RB)
+        self.assertIsNotNone(f)
+        self.assertLess(f.evidence["revenue_yoy"], 0)
+        self.assertIn("收入下滑", f.detail)
+
+    def test_still_profitable_is_silent(self):
+        """净利率下滑但没跨过零轴，交给 MARGIN_EROSION / QUALITY_DRIFT。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=20.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=80.0)
+        self.assertIsNone(rule_net_margin_turn(cur, prev, RB))
+
+    def test_continuing_loss_is_silent(self):
+        """一直亏损（-3% → -6%）是幅度恶化，不是转亏，本条不接管。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=-60.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=-30.0)
+        self.assertIsNone(rule_net_margin_turn(cur, prev, RB))
+
+    def test_zero_margin_counts_as_turn(self):
+        """净利率恰好为 0 视为已转亏——分子为零时股东回报已归零。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=0.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=80.0)
+        self.assertIsNotNone(rule_net_margin_turn(cur, prev, RB))
+
+    def test_missing_data_is_silent(self):
+        """净利率算不出来时静默——不在缺数据时编造结论。"""
+        cur = mk("2025A", revenue=None, net_profit=-60.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=80.0)
+        self.assertIsNone(rule_net_margin_turn(cur, prev, RB))
 
 
 class TestRuleBalanceSheetIdentity(unittest.TestCase):

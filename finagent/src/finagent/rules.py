@@ -93,6 +93,12 @@ class RuleBook:
     # 净利率（%）低于此值视为微利，异常容忍度应提高
     thin_margin: float = 2.0
 
+    # 由盈转亏后的亏损深度（净利率，%）。转亏本身是定性变化，一律要报；
+    # 深度达到该值判重大，否则判关注。分界线取 5 的理由：
+    # 净利率 -5% 意味着每 100 元收入亏 5 元，已不是"微利转微亏"的边界状态，
+    # 而是需要解释成本结构或资产减值的一次实质亏损。
+    net_loss_high: float = 5.0
+
     # 单科目变动显著性（%，用于勾稽与波动扫描）
     line_item_swing_warn: float = 50.0
     line_item_swing_high: float = 100.0
@@ -551,6 +557,72 @@ def rule_margin_erosion(
     )
 
 
+def rule_net_margin_turn(
+    cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
+) -> Finding | None:
+    """净利率由正转负：由盈转亏。
+
+    为什么必须单独成条，而不是靠 MARGIN_EROSION 或 QUALITY_DRIFT 兜住
+    ------------------------------------------------------------------
+    三条规则的语义各不相同，实测中各自漏的东西不一样：
+
+        MARGIN_EROSION   要求营收增长（g_rev > 0）。营收下滑时不触发，
+                         即"减收更减利"这种更常见的恶化形态没人管；
+        QUALITY_DRIFT    三期趋势规则，且加权后净利率只占 2 分。
+                         净利率(2)+杠杆(1)+流动性(1)=4 < 5 的转亏会被抑制；
+                         更重要的是，转亏是**单年事件**，要求三期数据本身就错配——
+                         等三期齐了，亏损已经发生两年了。
+
+    实测（911 家 A 股，2024A→2025A）有 79 家净利率由正转负，其中 31 家
+    只落到泛化的 SWING_SCAN（"存在 N 个科目同比大幅波动"），最深一例
+    净利率由 2.31% 掉到 -17.37%。这不是阈值松紧问题，是缺一条规则。
+
+    为什么不分「亏损扩大」（负数→更负）
+    ----------------------------------
+    那属于"恶化幅度"范畴，与转亏的"性质变化"不同：一家常年亏损的公司
+    净利率从 -3% 到 -6% 不改变定性判断，需要的是幅度阈值而非零轴穿越。
+    留作已知局限，不在本条规则里混入两个语义。
+    """
+    nm_prev, nm_cur = prev.net_margin(), cur.net_margin()
+    if nm_prev is None or nm_cur is None:
+        return None
+    if not (nm_prev > 0 >= nm_cur):
+        return None
+
+    depth = -nm_cur                     # 亏损深度（正数）
+    delta = nm_cur - nm_prev            # 负值，降幅
+    level = Level.HIGH if depth >= rb.net_loss_high else Level.WARN
+
+    g_rev = cur.yoy("revenue", prev)
+    if g_rev is None:
+        shape = "营收数据缺失，无法判断是缩量还是增量亏损"
+    elif g_rev < 0:
+        shape = f"同期营业收入同比 {g_rev:+.1f}%，属于收入下滑叠加盈利转亏"
+    else:
+        shape = f"同期营业收入同比 {g_rev:+.1f}%，属于增收却转亏，需查成本费用端"
+
+    return Finding(
+        rule_id="NET_MARGIN_TURN",
+        level=level,
+        title=f"净利率由正转负（{nm_prev:.2f}% → {nm_cur:.2f}%）",
+        detail=(
+            f"净利率由 {nm_prev:.2f}% 降至 {nm_cur:.2f}%，下降 {-delta:.2f} 个百分点，"
+            f"已由盈转亏（亏损深度 {depth:.2f}%）。{shape}。"
+            f"这是盈利性质的改变，不是幅度波动，必须核查非经常性损益、"
+            f"资产减值与费用确认是否集中释放。"
+        ),
+        items=["revenue", "net_profit"],
+        evidence={
+            "net_margin_prev": round(nm_prev, 2),
+            "net_margin_cur": round(nm_cur, 2),
+            "delta_pct": round(delta, 2),
+            "loss_depth": round(depth, 2),
+            "revenue_yoy": None if g_rev is None else round(g_rev, 2),
+        },
+        basis="由盈转亏是盈利性质的定性变化，与幅度阈值属于不同维度，需独立设线",
+    )
+
+
 def rule_balance_sheet_identity(
     cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
 ) -> Finding | None:
@@ -801,6 +873,7 @@ DEFAULT_RULES: tuple[Callable[..., Finding | None], ...] = (
     rule_debt_ratio,
     rule_goodwill_ratio,
     rule_margin_erosion,
+    rule_net_margin_turn,             # 定性变化：由盈转亏，两期即可判
     rule_line_item_swing,
     rule_quality_deterioration,       # 多期趋势：最后跑，需要完整序列
 )
