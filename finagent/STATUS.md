@@ -36,13 +36,19 @@ finagent 是一个 **A 股财报研判工具**：抓取上市公司三大报表 
 
 | 编号 | 局限 | 影响 | 关掉它的路径 |
 |---|---|---|---|
-| **7** | `QUALITY_DRIFT` 权重未经专家校准，是推理起点 | 权重合理性缺第三方背书 | **飞哥填 `.scratch/annotation_answers.md` → `score_annotations.py`** |
+| **7** | `QUALITY_DRIFT` 权重未经专家校准，是推理起点 | 权重合理性缺第三方背书 | **把 `.scratch/annotation_answers.md` 的默认值改成你的判断 → 重跑 `score_annotations.py`** |
 | 8 | 真实 LLM 只跑过本地 4B，未跑云端大模型 | 保真度达标不能外推到云端 | `scripts/ab_test.py --llm api`（见 README） |
 | 9 | 基准是第三方站点 **AI 抽取**结果，非审计数据 | 金额 3~5 位有效数字、站点入库不全 | 接 XBRL / 财 reporting 导出 |
 | 14 | `NET_MARGIN_TURN` 只覆盖"过零轴"，不覆盖"亏损扩大" | −3% → −6% 这类幅度恶化无人管 | 新规则或并入幅度阈值 |
 
 > **当前唯一卡飞哥的口子是局限 7**：权重仍是我的推理起点，不是你的判断。
-> 问卷 `.scratch/annotation_answers.md` 目前为空。
+>
+> 已用一组**忠实默认值**（= 现行推理起点）填好 `.scratch/annotation_answers.md`
+> 并跑通判卷器 `score_annotations.py`：Q10 归一后逐项回到 3/2/2/1/1，
+> 30 家样本两边都触发 6 家，**零变化基线**——链路自洽，局限 7 仍未关闭。
+> 后续只需改答案文件里任一行的值再重跑即可看到差异。
+> 另备 `.scratch/weight_sensitivity.py`：6 组权重 + 8 档门槛对照，
+> 结论是"改权重换的是哪几家、改门槛换的是有几家"，详见设计说明 §14.6。
 
 ## 4. 暂缓 / 未做（非必需，源站限流所限）
 
