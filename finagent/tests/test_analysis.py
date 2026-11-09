@@ -310,6 +310,49 @@ class TestRuleDebtRatio(unittest.TestCase):
         prev = mk("2024A", total_liabilities=500.0, total_assets=1000.0)
         self.assertIsNone(rule_debt_ratio(cur, prev, RB))
 
+    # --- 行业校准下的措辞：p75 远低于绝对线时不能说「处于高位」 ---
+    # 机械设备 521 家实测 p75=53.52%，比 70% 绝对线低 16.5pct。
+
+    def _calibrated_book(self):
+        return BenchmarkBook(entries={
+            ("机械设备", "debt_ratio"): IndustryBenchmark(
+                industry="机械设备", metric="debt_ratio", n_peers=521,
+                percentiles={"p50": 40.0, "p75": 53.52, "p90": 64.11},
+            )
+        })
+
+    def _calibrated_stmt(self, liabilities: float):
+        return FinancialStatement(
+            period="2025A",
+            items={"total_liabilities": liabilities, "total_assets": 1000.0},
+            meta={"industry": "机械设备"},
+        )
+
+    def test_calibrated_below_absolute_line_is_labeled_relative(self):
+        """55% 负债率只是比同行高，不是绝对高杠杆——标题必须说清。"""
+        cur = self._calibrated_stmt(550.0)
+        prev = mk("2024A", total_liabilities=500.0, total_assets=1000.0)
+        f = rule_debt_ratio(cur, prev, RB, benchmarks=self._calibrated_book())
+        self.assertIsNotNone(f)
+        self.assertEqual(f.title, "资产负债率相对同行偏高")
+        self.assertIn("绝对口径", f.detail)
+        self.assertEqual(f.evidence["line_source"], "industry:p75")
+
+    def test_calibrated_at_absolute_line_keeps_high_title(self):
+        """75% 无论按哪条线都算高位，标题不该降级成「相对同行」。"""
+        cur = self._calibrated_stmt(750.0)
+        prev = mk("2024A", total_liabilities=500.0, total_assets=1000.0)
+        f = rule_debt_ratio(cur, prev, RB, benchmarks=self._calibrated_book())
+        self.assertEqual(f.title, "资产负债率处于高位")
+        self.assertNotIn("绝对口径", f.detail)
+
+    def test_no_benchmark_keeps_original_title(self):
+        """无基准时行为逐字不变，向后兼容底线。"""
+        cur = mk("2025A", total_liabilities=750.0, total_assets=1000.0)
+        prev = mk("2024A", total_liabilities=500.0, total_assets=1000.0)
+        f = rule_debt_ratio(cur, prev, RB)
+        self.assertEqual(f.title, "资产负债率处于高位")
+
 
 class TestRuleGoodwill(unittest.TestCase):
     def test_triggers(self):

@@ -487,13 +487,24 @@ def rule_debt_ratio(
     trend = ""
     if prev_dr is not None:
         trend = f"，上年同期 {prev_dr:.2f}%（{dr - prev_dr:+.2f}pct）"
+
+    # 行业 p75 常远低于 70% 绝对线（机械设备 521 家实测 p75=53.52%）。
+    # 此时触发只说明"比四分之三同行高"，不说明绝对杠杆高：
+    # 若仍写「处于高位」，55% 负债率的公司会被读成高杠杆。
+    # 只在「校准生效 + 绝对水平未达常规线」时改措辞，绝对线路径逐字不变。
+    relative_only = line.calibrated and dr < rb.debt_ratio_warn
+    title = "资产负债率相对同行偏高" if relative_only else "资产负债率处于高位"
+    caveat = (
+        f"该观察线来自行业 p75 分位；按绝对口径的 {rb.debt_ratio_warn:.0f}% "
+        f"常规观察线尚未达到，此处提示的是同业相对位置，不是绝对偿债风险。"
+    ) if relative_only else ""
     return Finding(
         rule_id="DEBT_RATIO",
         level=level,
-        title="资产负债率处于高位",
+        title=title,
         detail=(
             f"资产负债率 {dr:.2f}%（观察线 {warn:.0f}%{line.note}）{trend}。"
-            f"偿债压力与再融资能力需一并评估。"
+            f"偿债压力与再融资能力需一并评估。{caveat}"
         ),
         items=["total_liabilities", "total_assets"],
         evidence={
