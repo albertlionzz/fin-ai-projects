@@ -57,6 +57,7 @@ from finagent.rules import (  # noqa: E402
     rule_gross_margin_swing,
     rule_inventory_growth_gap,
     rule_margin_erosion,
+    rule_net_loss_deepening,
     rule_net_margin_turn,
     rule_receivable_growth_gap,
 )
@@ -452,7 +453,104 @@ class TestRuleNetMarginTurn(unittest.TestCase):
         self.assertIsNone(rule_net_margin_turn(cur, prev, RB))
 
 
-class TestRuleBalanceSheetIdentity(unittest.TestCase):
+class TestRuleNetLossDeepening(unittest.TestCase):
+    """亏损扩大：幅度恶化，两期即可判。
+
+    与 NET_MARGIN_TURN 的分界：那边管跨零轴（性质），这边管零轴以内
+    变得更糟（幅度）。1891 家实测 146 家亏损扩大、65 家无实质性规则
+    命中、13 家零信号，最狠一例 -0.77% → -58.72% —— 这就是本条缺位的
+    证据（设计说明 §15.8）。
+    """
+
+    def test_deep_deepening_is_high(self):
+        """-3% → -8%：恶化 5pct、深度 8%，压过重大线。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=-80.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=-30.0)
+        f = rule_net_loss_deepening(cur, prev, RB)
+        self.assertIsNotNone(f)
+        self.assertEqual(f.rule_id, "NET_LOSS_DEEPENING")
+        self.assertEqual(f.level, Level.HIGH)
+        self.assertAlmostEqual(f.evidence["deepened_pct"], 5.0, places=2)
+        self.assertAlmostEqual(f.evidence["loss_depth"], 8.0, places=2)
+
+    def test_shallow_deepening_is_warn(self):
+        """-2% → -4%：恶化 2pct 但深度 4% 不到重大线，判关注。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=-40.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=-20.0)
+        f = rule_net_loss_deepening(cur, prev, RB)
+        self.assertIsNotNone(f)
+        self.assertEqual(f.level, Level.WARN)
+
+    def test_narrowing_is_silent(self):
+        """-6% → -3% 是亏损收窄（改善），不得误报。1891 家里有 199 家。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=-30.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=-60.0)
+        self.assertIsNone(rule_net_loss_deepening(cur, prev, RB))
+
+    def test_turn_is_not_deepening(self):
+        """转亏归 NET_MARGIN_TURN 管，本条不越界（prev > 0 直接不触发）。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=-60.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=80.0)
+        self.assertIsNone(rule_net_loss_deepening(cur, prev, RB))
+
+    def test_still_profitable_is_silent(self):
+        """两期都盈利（哪怕大幅下滑）不触发，归 MARGIN_EROSION / 趋势规则。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=20.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=80.0)
+        self.assertIsNone(rule_net_loss_deepening(cur, prev, RB))
+
+    def test_noise_below_threshold_is_silent(self):
+        """恶化不足 1pct 不报：源站 3~5 位有效数字下这是抽取噪声。
+
+        实测原型：中威电子 -34.32% → -34.50%（恶化 0.17pct）。
+        """
+        cur = mk("2025A", revenue=1000.0, net_profit=-345.0)    # -34.5%
+        prev = mk("2024A", revenue=1000.0, net_profit=-343.2)   # -34.32%
+        self.assertIsNone(rule_net_loss_deepening(cur, prev, RB))
+
+    def test_boundary_exact_threshold_triggers(self):
+        """恶化恰好等于门槛要报（>= 判定，与 swing 阈值口径一致）。"""
+        cur = mk("2025A", revenue=1000.0, net_profit=-31.0)     # -3.1%
+        prev = mk("2024A", revenue=1000.0, net_profit=-21.0)    # -2.1%
+        f = rule_net_loss_deepening(cur, prev, RB)
+        self.assertIsNotNone(f)
+        self.assertAlmostEqual(f.evidence["deepened_pct"], 1.0, places=2)
+
+    def test_revenue_shape_disclosed(self):
+        """营收下滑与增收亏损扩大，detail 必须区分两种追查方向。"""
+        cur_down = mk("2025A", revenue=800.0, net_profit=-60.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=-30.0)
+        f = rule_net_loss_deepening(cur_down, prev, RB)
+        self.assertIsNotNone(f)
+        self.assertIn("收入下滑", f.detail)
+        self.assertIn("亏损扩大", f.detail)
+
+        cur_up = mk("2025A", revenue=1200.0, net_profit=-80.0)
+        f2 = rule_net_loss_deepening(cur_up, prev, RB)
+        self.assertIsNotNone(f2)
+        self.assertIn("成本费用", f2.detail)
+
+    def test_missing_data_is_silent(self):
+        """净利率算不出来时静默——不在缺数据时编造结论。"""
+        cur = mk("2025A", revenue=None, net_profit=-60.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=-30.0)
+        self.assertIsNone(rule_net_loss_deepening(cur, prev, RB))
+
+    def test_engine_contains_rule(self):
+        """规则已注册进默认引擎（两期规则段）。"""
+        ids = [r.__name__ for r in RuleEngine().rules]
+        self.assertIn("rule_net_loss_deepening", ids)
+
+    def test_dual_with_net_margin_turn(self):
+        """对偶钉子：同一对 -3% → -6% 的报表，TURN 静默、DEEPENING 报出。
+
+        与 TestRuleNetMarginTurn.test_continuing_loss_is_silent 互为镜像，
+        两条规则的语义分界由这对测试共同钉住。
+        """
+        cur = mk("2025A", revenue=1000.0, net_profit=-60.0)
+        prev = mk("2024A", revenue=1000.0, net_profit=-30.0)
+        self.assertIsNone(rule_net_margin_turn(cur, prev, RB))
+        self.assertIsNotNone(rule_net_loss_deepening(cur, prev, RB))
     def test_passes_when_balanced(self):
         cur = mk("2025A", total_assets=1000.0, total_liabilities=600.0, total_equity=400.0)
         self.assertIsNone(rule_balance_sheet_identity(cur, mk("2024A"), RB))

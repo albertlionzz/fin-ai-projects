@@ -99,6 +99,12 @@ class RuleBook:
     # 而是需要解释成本结构或资产减值的一次实质亏损。
     net_loss_high: float = 5.0
 
+    # 连续亏损下的恶化幅度门槛（净利率 pct）。亏损扩大（如 -3% → -6%）
+    # 只有恶化达到该值才报：源站金额仅 3~5 位有效数字，亿级营收下
+    # 不足 1pct 的净利率变化（实测全漏名单里最小一例 -34.32% → -34.50%，
+    # 恶化 0.17pct）属于抽取噪声量级，报出去是把噪声当事实。
+    loss_deepening_warn: float = 1.0
+
     # 单科目变动显著性（%，用于勾稽与波动扫描）
     line_item_swing_warn: float = 50.0
     line_item_swing_high: float = 100.0
@@ -634,6 +640,78 @@ def rule_net_margin_turn(
     )
 
 
+def rule_net_loss_deepening(
+    cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
+) -> Finding | None:
+    """连续亏损下的亏损扩大：幅度恶化。
+
+    与 NET_MARGIN_TURN 的分工（设计说明 §15.8）
+    ------------------------------------------------
+    两条规则同用净利率序列，但语义不同，不能合并：
+
+        NET_MARGIN_TURN      性质：跨过零轴（盈利 → 亏损），一律要报；
+        NET_LOSS_DEEPENING   幅度：零轴以内变得更糟（-3% → -6%），
+                             要过幅度门槛，深度沿用同一条重大线。
+
+    为什么不能靠现有规则兜住（1891 家实测，2024A→2025A）：
+    连续亏损 345 家中亏损扩大 146 家，被实质性规则覆盖的只有 81 家
+    （GM_SWING 56 / MARGIN_EROSION 42——后者前置营收增长、
+    104 家营收下滑的必然不触发 / QUALITY_DRIFT 2）；
+    **65 家（44.5%）全漏**，其中 13 家连泛化的 SWING_SCAN 都无信号，
+    最深一例净利率 -0.77% → -58.72%（恶化 57.94pct）整份报告零命名。
+    这与 MARGIN_EROSION 当年漏"减收更减利"是同一个结构：现有规则的
+    前置条件恰好排除了最常见的恶化形态。
+
+    阈值设计：
+    - 恶化幅度 >= loss_deepening_warn（默认 1pct）才报。实测全漏名单里
+      最小 5 家恶化 0.07~0.43pct，全部是深亏状态下的微小变动，
+      源站 3~5 位有效数字下属于噪声，不报。
+    - 重大线复用 net_loss_high（深度 >= 5%），与 NET_MARGIN_TURN 同量纲：
+      降幅会奖励"去年基数高"，深度才是严重度的正确量纲。
+    - 亏损收窄（-6% → -3%）不触发：这是改善，不是恶化。
+    """
+    nm_prev, nm_cur = prev.net_margin(), cur.net_margin()
+    if nm_prev is None or nm_cur is None:
+        return None
+    if not (nm_prev < 0 and nm_cur < 0 and nm_cur < nm_prev):
+        return None
+
+    deepened = nm_prev - nm_cur           # 正值，恶化幅度（pct）
+    if deepened < rb.loss_deepening_warn:
+        return None
+    depth = -nm_cur                       # 当前亏损深度（正数）
+    level = Level.HIGH if depth >= rb.net_loss_high else Level.WARN
+
+    g_rev = cur.yoy("revenue", prev)
+    if g_rev is None:
+        shape = "营收数据缺失，无法判断是缩量还是增量恶化"
+    elif g_rev < 0:
+        shape = f"同期营业收入同比 {g_rev:+.1f}%，收入下滑叠加亏损扩大"
+    else:
+        shape = f"同期营业收入同比 {g_rev:+.1f}%，增收状态下亏损仍在扩大，需查成本费用端"
+
+    return Finding(
+        rule_id="NET_LOSS_DEEPENING",
+        level=level,
+        title=f"连续亏损且亏损扩大（{nm_prev:.2f}% → {nm_cur:.2f}）",
+        detail=(
+            f"净利率由 {nm_prev:.2f}% 恶化至 {nm_cur:.2f}%，扩大 {deepened:.2f} 个百分点，"
+            f"当前亏损深度 {depth:.2f}%。{shape}。"
+            f"持续亏损本就需要逐期解释，本期还在加深，"
+            f"应核查经营性亏损还是资产减值/一次性损失在继续释放。"
+        ),
+        items=["revenue", "net_profit"],
+        evidence={
+            "net_margin_prev": round(nm_prev, 2),
+            "net_margin_cur": round(nm_cur, 2),
+            "deepened_pct": round(deepened, 2),
+            "loss_depth": round(depth, 2),
+            "revenue_yoy": None if g_rev is None else round(g_rev, 2),
+        },
+        basis="亏损扩大是幅度恶化，与转亏的性质变化不同维度；幅度门槛排噪、深度定级，与 NET_MARGIN_TURN 同量纲",
+    )
+
+
 def rule_balance_sheet_identity(
     cur: FinancialStatement, prev: FinancialStatement, rb: RuleBook
 ) -> Finding | None:
@@ -885,6 +963,7 @@ DEFAULT_RULES: tuple[Callable[..., Finding | None], ...] = (
     rule_goodwill_ratio,
     rule_margin_erosion,
     rule_net_margin_turn,             # 定性变化：由盈转亏，两期即可判
+    rule_net_loss_deepening,          # 幅度恶化：连续亏损下扩大，两期即可判
     rule_line_item_swing,
     rule_quality_deterioration,       # 多期趋势：最后跑，需要完整序列
 )
